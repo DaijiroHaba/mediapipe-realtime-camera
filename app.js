@@ -1,4 +1,4 @@
-import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.2.0';
+import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.2.1';
 import {CanvasRecorder} from './recorder.mjs';
 const $=id=>document.getElementById(id), video=$('video'), canvas=$('canvas'), ctx=canvas.getContext('2d');
 const snapshot=document.createElement('canvas'), snap=snapshot.getContext('2d');
@@ -46,7 +46,7 @@ async function refreshCameras(){
 }
 function initWorker(numPoses,token){
   return new Promise((resolve,reject)=>{
-    const w=new Worker('./pose-worker.js?v=1.2.0');worker=w;
+    const w=new Worker('./pose-worker.js?v=1.2.1');worker=w;
     const timeout=setTimeout(()=>reject(new Error('モデル初期化が45秒以内に完了しませんでした。vendor・modelsの配置を確認してください。')),45000);
     const rejectInit=error=>{clearTimeout(timeout);reject(error);};cancelInit=()=>rejectInit(new Error('開始を中止しました。'));
     w.onerror=e=>{if(token!==generation)return;const error=new Error(`推定エンジンを起動できません。ライブラリ配置・ブラウザを確認してください。${e.message||''}`);if(starting)rejectInit(error);else fail(error);};
@@ -142,7 +142,7 @@ function consume(data){
   $('cue').textContent=withPose.length>1?'動作の目安は骨格が1人だけ検出されたときに表示':angle===null?'関節が十分に見えていません':inrange?'設定した範囲内です':`現在は設定範囲（${session.angle.min}〜${session.angle.max}°）の外です`;
   if(result.events.length){$('events').replaceChildren();for(const e of events.slice(-8).reverse()){const tr=document.createElement('tr');for(const val of [e.time.toFixed(1),`#${e.id}`,eventNames[e.type]]){const td=document.createElement('td');td.textContent=val;tr.append(td);}$('events').append(tr);}}
 }
-function updateScreenMetrics(){const f=modeFeatures($('mode').value);$('screenMetrics').textContent=`検出 ${$('people').textContent}人${f.traffic?` / 通過 A→B ${tracker.forward}回・B→A ${tracker.reverse}回 / 関心候補 ${tracker.interestPeople}人相当 / 候補率 ${tracker.interestRate===null?'--':tracker.interestRate.toFixed(1)}%`:''}`;}
+function updateScreenMetrics(){const f=modeFeatures($('mode').value),c=running?tracker.config:config();const sides=c.axis==='x'?($('mirror').checked?'A=右・B=左':'A=左・B=右'):'A=上・B=下';$('screenMetrics').textContent=`検出 ${$('people').textContent}人${f.traffic?` / ${sides} / 通過 A→B ${tracker.forward}回・B→A ${tracker.reverse}回 / 関心候補 ${tracker.interestPeople}人相当 / 候補率 ${tracker.interestRate===null?'--':tracker.interestRate.toFixed(1)}%`:''}`;}
 function updateStats(tracks){$('people').textContent=tracks.length;$('stopped').textContent=tracks.filter(t=>t.still).length;$('forward').textContent=tracker.forward;$('reverse').textContent=tracker.reverse;$('eligiblePeople').textContent=tracker.eligiblePeople;$('interestPeople').textContent=tracker.interestPeople;$('interestRate').textContent=tracker.interestRate===null?'--':tracker.interestRate.toFixed(1);$('stopTotal').textContent=`立ち止まり開始 ${tracker.stopEvents} 回`;updateScreenMetrics();}
 function render(tracks){
   const w=canvas.width,h=canvas.height,mirror=$('mirror').checked,x=v=>(mirror?1-v:v)*w,y=v=>v*h;
@@ -155,7 +155,6 @@ function render(tracks){
   }
   if(modeFeatures($('mode').value).traffic&&$('showLine').checked){
     const c=tracker.config;ctx.strokeStyle='#ffe08a';ctx.lineWidth=2;ctx.setLineDash([9,7]);ctx.beginPath();if(c.axis==='x'){ctx.moveTo(x(c.line),0);ctx.lineTo(x(c.line),h);}else{ctx.moveTo(0,y(c.line));ctx.lineTo(w,y(c.line));}ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#ffe08a';ctx.strokeStyle='#162122';ctx.lineWidth=4;
-    for(const [label,px,py] of c.axis==='x'?[['A側',x(c.line-.06),25],['B側',x(c.line+.06),25]]:[['A側',18,y(c.line)-12],['B側',18,y(c.line)+25]]){ctx.strokeText(label,px,py);ctx.fillText(label,px,py);}
   }
   if(modeFeatures($('mode').value).traffic&&$('interestRegion').value==='center'){const r=tracker.config.region;ctx.strokeStyle='#86c9ff';ctx.lineWidth=2;ctx.setLineDash([4,5]);ctx.strokeRect(Math.min(x(r.x),x(r.x+r.w)),y(r.y),r.w*w,r.h*h);ctx.setLineDash([]);}
   if(recording.state==='recording'){ctx.fillStyle='#a81227';ctx.fillRect(Math.max(0,w-160),h-35,160,35);ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.fillText(`REC 録画中 ${Math.floor(recording.elapsed)}秒`,Math.max(4,w-150),h-12);}

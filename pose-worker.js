@@ -4,7 +4,7 @@ self.onmessage=async ({data})=>{
     if(data.type==='init'){
       // The WASM loader uses importScripts, which requires a classic Worker.
       const {FilesetResolver,PoseLandmarker,ObjectDetector}=await import('./vendor/vision_bundle.mjs');
-      const core=await import('./core.mjs?v=1.2.0');
+      const core=await import('./core.mjs?v=1.2.1');
       const {MODEL_THRESHOLDS,modeFeatures}=core;personDetection=core.personDetection;
       features=modeFeatures(data.mode||'single');
       const files=await FilesetResolver.forVisionTasks(new URL('./vendor/wasm',self.location.href).href);
