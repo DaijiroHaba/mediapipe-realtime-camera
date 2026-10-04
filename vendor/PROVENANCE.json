@@ -1,5 +1,25 @@
 [
   {
+    "file": "icons/camera.svg",
+    "url": "https://cdn.jsdelivr.net/npm/lucide-static@0.468.0/icons/camera.svg",
+    "sha256": "89b7493fb7f18b3a303184f9dea61e989521eae4a98349bbaa979a586f063cba"
+  },
+  {
+    "file": "icons/camera-off.svg",
+    "url": "https://cdn.jsdelivr.net/npm/lucide-static@0.468.0/icons/camera-off.svg",
+    "sha256": "6f4712c9024fa0699f1580926a771f4a77c4f3d13e2fc56997de64ce7d49fd18"
+  },
+  {
+    "file": "icons/maximize.svg",
+    "url": "https://cdn.jsdelivr.net/npm/lucide-static@0.468.0/icons/maximize.svg",
+    "sha256": "0864b30f3a6b95b49375c93ad874db47474a56bd2d6276c51e938f0b5e4ade9e"
+  },
+  {
+    "file": "icons/minimize.svg",
+    "url": "https://cdn.jsdelivr.net/npm/lucide-static@0.468.0/icons/minimize.svg",
+    "sha256": "043ddac5e95b96c443d42d15a4444f70fc24aa57d7642ce7c782bb2644ed5be4"
+  },
+  {
     "file": "vision_bundle.mjs",
     "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs",
     "bytes": 137735,

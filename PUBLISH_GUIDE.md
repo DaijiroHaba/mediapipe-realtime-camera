@@ -2,11 +2,13 @@
 
 このアプリは利用者自身のブラウザでカメラ映像を処理する静的サイトです。Google Cloud Run、Python、先生のPCの常時起動は不要です。
 
-`http://localhost:8791` や `http://localhost:8792` は、開発PCでの動作確認用です。localhostはURLを開いた人のPC自身を意味するため、そのURLを他人に送っても共有サイトにはなりません。
+現在の `http://localhost:8791` は、このPCでの動作確認用です。localhostはURLを開いた人のPC自身を意味するため、そのURLを他人に送っても共有サイトにはなりません。
 
-この公開版のURLは https://daijirohaba.github.io/mediapipe-realtime-camera/ です。利用者へはこのHTTPS URLを共有してください。配布者のPCがOFFでもGitHub Pagesからサイトが配信されます。利用者側はインターネットとカメラ、Chrome / Edgeだけで利用できます。
+共有URLは https://daijirohaba.github.io/mediapipe-realtime-camera/ です。更新後もURLは同じです。配布者のPCがOFFでもGitHub Pagesから配信されます。利用者側はインターネットとカメラ、Chrome / Edgeだけで利用できます。
 
-公開リポジトリは https://github.com/DaijiroHaba/mediapipe-realtime-camera です。更新時は、このリポジトリの `main` ブランチのトップに静的サイトのファイルだけを配置します。録画・CSV・監査ログはアップロードしません。
+最新版は `shared_site_v1_2/` の静的サイト一式です。公開リポジトリは https://github.com/DaijiroHaba/mediapipe-realtime-camera 。公開作業コピー `github_pages_release/` の静的ファイルのみを `main` に反映します。旧 `shared_site_v1_1/` と旧ZIPは旧版として残し、新版と混同しないでください。
+
+v1.2では全画面と3モードに対応します。姿勢ランドマークは最大4人、人流は人物検出モデルで最大20人、併用は両者の上限を別々に設定します。設定人数は検出保証ではありません。関心候補は連続3秒以上の立ち止まりを一時IDごとに計数した参考指標で、注視・関心そのものではありません。詳しくは公開版READMEを参照してください。
 
 ## GitHub Pagesに配置
 
@@ -21,7 +23,7 @@
 ## Netlifyに配置
 
 1. Netlifyでログインし、手動デプロイ（Drag and drop / Deploy manually）を選びます。
-2. `shared_site_v1_1/` を指定します。`index.html` が直接入っているフォルダを使います。
+2. `shared_site_v1_2/` を指定します。`index.html` が直接入っているフォルダを使います。
 3. 発行されたHTTPS URLを別PCで確認して共有します。ビルドコマンドとサーバー起動は不要です。
 
 同梱 `netlify.toml` は公開ルートとWASM・JavaScriptの配信形式、カメラの使用方針を指定します。料金・利用上限は公開先の管理画面で確認してください。
@@ -53,12 +55,12 @@ vendor/        MediaPipe・WASM・Lucideアイコン・ライセンス
 - 動画・座標・一時IDを外部へ送信する処理はありません。静的ファイルの配信側には通常のサイトアクセスログが残り得ます。
 - 映像録画は初期OFF。上部の赤い「録画していません」で確認できます。録画アイコンを押したときだけ記録し、保存アイコンで端末へ保存します。座標記録は別設定です。
 - 脚が映らない場合は部分検出です。全身を見る場合はカメラを固定し、頭と両足を画面に入れてください。
-- A/Bは通過計数線の両側で、複数人モードに表示します。
+- A/Bは通過計数線の両側で、人流または併用モードに表示します。
 
 ## 確認すること
 
 実公開後に別PCから確認することで、先生のPCへの依存がないことを最終確認できます。今回の作業では、共有用フォルダをサブパスに置いた状態で、パッケージ内のファイルだけからモデル・WASMを読み込むことを確認しました。録画は同じソースでWebMを生成・再生して確認済みです。実際のHTTPSホスト上での確認は公開操作後に行ってください。
 
-共有用ファイルはすべて `shared_site_v1_1_manifest.json` のファイルリスト・SHA-256で照合できます。更新時は、新しいフォルダ名を指定して `node prepare-share.mjs shared_site_v1_1_1` と実行できます。現在の生成フォルダだけを更新する場合は `node prepare-share.mjs --refresh-generated`。未知のファイルが混入している場合は上書きせず停止します。
+共有用ファイルは `shared_site_v1_2_manifest.json` のファイルリスト・SHA-256で照合できます。更新時は、新しいフォルダ名を指定して `node prepare-share.mjs shared_site_v1_2_1` と実行できます。現在の生成フォルダだけを更新する場合は `node prepare-share.mjs shared_site_v1_2 --refresh-generated`。未知のファイルが混入している場合は上書きせず停止します。
 
 参考: [GitHub Pagesの仕組み](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)、[GitHub Pagesの作成手順](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site)、[MediaRecorder](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder)。
