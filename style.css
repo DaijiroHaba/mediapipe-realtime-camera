@@ -33,3 +33,6 @@ header{position:sticky;top:0;z-index:20;flex-wrap:wrap}
 .stats .traffic-stat{border-bottom:1px solid #e2e9e7}.stats #interestRate{font-size:26px}
 @media(max-width:500px){#viewer:fullscreen{padding:8px}#viewer:fullscreen .toolbar{gap:6px}.toolbar select{max-width:230px}#viewer:fullscreen .record-tools{gap:6px}}
 input[type=file]{max-width:100%;font-size:13px}#fileProgress{width:100%}#fileProgressText{overflow-wrap:anywhere}
+
+/* Posture awareness is a display layer; existing camera and traffic modes remain. */
+.toolbar{flex-wrap:wrap;gap:10px}.toolbar .display-mode{font-size:13px;gap:6px}.toolbar .display-mode select{max-width:170px}.awareness-note{margin:0;padding:9px 12px;color:#d9f4f3;background:#173b49;font-size:13px;line-height:1.5}.awareness-note[hidden]{display:none}#viewer:fullscreen .awareness-note{flex:0 0 auto;margin:0}#viewer:fullscreen .stage{min-height:0}
