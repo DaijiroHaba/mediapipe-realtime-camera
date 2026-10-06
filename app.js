@@ -1,8 +1,8 @@
 import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0';
 import {CanvasRecorder} from './recorder.mjs';
 import {openVideo,seekVideo} from './file-video.mjs';
-import {PostureAwareness,LIMITS,AWARENESS_VERSION,ambiguousPosePoints,postureDisplayDetection} from './posture-awareness.mjs?v=0.2.0';
-import {drawAwareness} from './posture-overlay.mjs?v=0.2.0';
+import {PostureAwareness,LIMITS,AWARENESS_VERSION,ambiguousPosePoints,postureDisplayDetection} from './posture-awareness.mjs?v=0.3.0';
+import {drawAwareness} from './posture-overlay.mjs?v=0.3.0';
 const awareness=new PostureAwareness();
 // Display continuity is independent of the legacy traffic counter's 0.75 s expiry.
 const postureTracker=new Tracker({maxGap:LIMITS.maxGapSeconds,gate:.12,countingEnabled:false});
@@ -26,7 +26,7 @@ const recording=new CanvasRecorder({onUpdate:updateRecordingStatus,onComplete:in
 function message(text){$('message').textContent=text;}
 function controls(active){for(const id of locked)$(id).disabled=active;$('start').disabled=active||recording.state==='stopping';$('stop').disabled=!active;$('reset').disabled=active;$('refresh').disabled=active;syncMode();updateRecordingStatus();}
 function config(){return {axis:$('axis').value,line:Number($('line').value)/100,dwell:Number($('dwell').value),radius:Number($('radius').value),countingEnabled:modeFeatures($('mode').value).traffic,region:interestRegion($('interestRegion').value)};}
-function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();if(awarenessOn()&&!running)$('bodyStatus').textContent='顔から腰までを画面中央に映してください。足先は不要です。左右に少し傾けると表示が変わります。';$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();}
+function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();$('awarenessViewSetting').hidden=!awarenessOn();$('awarenessView').disabled=!f.pose||!awarenessOn();if(awarenessOn()&&!running)$('bodyStatus').textContent='自然な姿勢の位置関係を表示します。上体には肩と腰、側面の膝には股・膝・足首が必要です。';$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();}
 function setPeopleOptions(){const traffic=modeFeatures($('mode').value).traffic,previous=$('maxPeople').value;const values=traffic?[1,2,4,6,8,12,20]:[1,2,4];$('maxPeople').replaceChildren(...values.map(n=>new Option(`${n}人${n>4?'（試行）':''}`,String(n))));$('maxPeople').value=values.includes(Number(previous))?previous:traffic?'12':'4';}
 function updateLineLegend(){const f=modeFeatures($('mode').value),c=running?tracker.config:config(),mirror=$('mirror').checked;$('lineLegend').hidden=!f.traffic;const sides=c.axis==='x'?(mirror?'A＝画面の右、B＝画面の左（左右反転中）':'A＝画面の左、B＝画面の右'):'A＝画面の上、B＝画面の下';$('lineLegend').textContent=`通過計数：${sides}。人物枠の中心が線を越えた回数を計数します。${$('showLine').checked?'':'線は非表示ですが、計数は継続します。'}`;$('interestNote').textContent=`関心候補は対象範囲内で連続${c.dwell}秒以上立ち止まった一時IDです。注視・関心そのものは判定しません。IDが変わると同じ人を再計数する可能性があります。`;}
 function updateRecordingStatus(){
@@ -96,11 +96,11 @@ async function start(){
     session.model={name:'pose_landmarker_full',tasks_vision_version:'0.10.21',confidence_thresholds:MODEL_THRESHOLDS,landmark_visibility_threshold:.5};
     session.model.pose_enabled=features.pose;session.model.person_detector_enabled=features.traffic;session.model.person_detector={name:'efficientdet_lite0',category:'person',score_threshold:.5};
     session.interest_definition={threshold_seconds:c.dwell,region:c.region,region_setting:$('interestRegion').value,position:'person bounding-box center',movement_tolerance_normalized:c.radius,denominator:'temporary IDs seen inside region',numerator:'temporary IDs with a continuous stationary episode inside region',deduplication:'once per continuous temporary ID per session; ID expiry can double count',actual_interest_validated:false};
-    session.posture_awareness={version:AWARENESS_VERSION,enabled_at_start:awarenessOn(),display_tracking:postureTracker.config,display_id_prefix:'P',settings_changes:[],thresholds:LIMITS,threshold_basis:'engineering display heuristics; not clinical cutoffs',coordinates:'aspect-corrected source 2D; direction is displayed screen left/right',validation:'SYNTHETIC_SOFTWARE_ONLY; field accuracy and learning benefit unvalidated',findings_saved:false};
+    session.posture_awareness={version:AWARENESS_VERSION,enabled_at_start:awarenessOn(),view_mode_at_start:$('awarenessView').value,view_detection:'image-geometry heuristics; not validated camera calibration',display_tracking:postureTracker.config,display_id_prefix:'P',settings_changes:[],thresholds:LIMITS,threshold_basis:'engineering display heuristics; not clinical cutoffs',coordinates:'aspect-corrected source 2D; direction is displayed screen left/right',validation:'SYNTHETIC_SOFTWARE_ONLY; field accuracy and learning benefit unvalidated',findings_saved:false};
     session.recordings=[];session.recording_policy={automatic:false,audio:false,max_seconds:recording.maxSeconds,max_bytes_approximate:recording.maxBytes,server_upload:false};
     session.source=fromFile?{type:'video',filename:file.name,bytes:file.size,last_modified:file.lastModified,duration_s:fileSource.duration,total_samples:Math.ceil(fileSource.duration*session.requested_fps),sample_limit:3000,timing:'REQUESTED_SOURCE_SAMPLE_TIME_NOT_PROCESSING_TIME',counting_timestamp:'requestedTime',decoded_timestamp:'mediaTime in frame_timing; quantization depends on source frame rate'}:{type:'camera'};session.frame_timing=[];session.completion='RUNNING';
     session.tracking_rules={method:'greedy nearest center; countable state must match',gate:'maximum normalized center distance per match',maxGap:'seconds before temporary ID expires',deadBand:'normalized half-width about counting line',missing_detection:'reset crossing side and stop timer',counts:'crossing events and temporary-ID interest candidates, not unique people'};
-    $('export').disabled=false;message(fromFile?'動画解析中です。通過・立ち止まりは元動画の時刻で判定します。動画の再録画は行いません。':'計測中です。カメラを固定し、全身が入るようにしてください。終了するには「停止」を押してください。');if(!fromFile)await refreshCameras();schedule(token);
+    $('export').disabled=false;message(fromFile?'動画解析中です。通過・立ち止まりは元動画の時刻で判定します。動画の再録画は行いません。':awarenessOn()?'観察中です。確認できた姿勢点の位置関係を表示します。終了するには「停止」を押してください。':'計測中です。カメラを固定し、全身が入るようにしてください。終了するには「停止」を押してください。');if(!fromFile)await refreshCameras();schedule(token);
   }catch(error){if(token===generation)fail(error);}
 }
 function schedule(token){clearTimeout(timer);timer=setTimeout(()=>capture(token),fileSource?0:Math.max(0,1000/Number($('fps').value)-(performance.now()-lastFrame)));}
@@ -142,7 +142,7 @@ function consume(data){
   const result=tracker.update(detections,time);
   lastTracks=awarenessOn()?postureTracker.update(detections.map(d=>postureDisplayDetection(d,canvas.width,canvas.height)),time).tracks.map(t=>({...t,id:`P${t.id}`,displayIndex:t.id})):result.tracks;
   clearTimeout(awarenessStaleTimer);
-  if(awarenessOn()){observations=awareness.update(lastTracks,time,canvas.width,canvas.height,$('mirror').checked);
+  if(awarenessOn()){observations=awareness.update(lastTracks,time,canvas.width,canvas.height,$('mirror').checked,$('awarenessView').value);
     awarenessStaleTimer=setTimeout(()=>{if(running&&awarenessOn()){awareness.reset();postureTracker.reset();observations=new Map(lastTracks.map(t=>[t.id,{findings:[],text:'映像の処理待ちです・人数を減らすと速くなります'}]));render(lastTracks);}},LIMITS.maxGapSeconds*1000);
   }else {awareness.reset();postureTracker.reset();observations=new Map();}
   frames++;session.processed_frames=frames;if(detections.length)session.detected_frames++;
@@ -160,7 +160,7 @@ function consume(data){
   updateStats(result.tracks);render(lastTracks);updateRecordingStatus();
   const full=result.tracks.filter(t=>t.fullBody).length,withPose=result.tracks.filter(t=>t.points.length>0);
   $('bodyStatus').textContent=!result.tracks.length?'人物を検出していません。照明とカメラの画角を確認してください。':!features.pose?`人物枠 ${result.tracks.length}人（推定）。骨格・注視は推定していません。`:features.traffic?`人物枠 ${result.tracks.length}人 / 骨格対応 ${withPose.length}人 / 全身検出 ${full}人。枠に対応しない骨格は計数に使用しません。`:`全身検出 ${full}人 / 部分検出 ${result.tracks.length-full}人。頭と両足が入る画角で使用してください。`;
-  if(awarenessOn()){const ready=[...observations.values()].filter(o=>o.status==='ready'||o.status==='observed').length;$('bodyStatus').textContent=result.tracks.length?`姿勢表示 ${ready}人 / 検出 ${result.tracks.length}人。顔と肩を映して左右に少し傾けてみましょう。上体の表示には腰まで必要です。足先は不要です。`:'顔から腰までを画面中央に映してください。カメラは水平に固定してください。';}
+  if(awarenessOn()){const ready=[...observations.values()].filter(o=>o.status==='ready'||o.status==='observed').length;$('bodyStatus').textContent=result.tracks.length?`姿勢表示 ${ready}人 / 検出 ${result.tracks.length}人。いま映っている位置関係を表示しています。上体には肩と腰、膝には股・膝・足首が必要です。`:'必要な姿勢点を検出していません。照明・画角を確認してください。カメラは水平に固定してください。';}
   const p=features.pose&&withPose.length===1?withPose[0].points:null;
   const angle=p?angle2D(p,$('joint').value,canvas.width,canvas.height):null;
   $('angle').textContent=angle===null?'--°':`${angle.toFixed(1)}°`;
@@ -202,11 +202,13 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||
 window.addEventListener('beforeunload',event=>{if(recording.state!=='idle'||(recording.blob&&!recording.saved)){event.preventDefault();event.returnValue='';}});
 $('mode').addEventListener('change',()=>{if(!running&&!starting){if(session&&!confirm('モード変更で現在のログをリセットします。必要な結果は保存済みですか？')){$('mode').value=session.mode;return;}setPeopleOptions();$('maxPeople').value=$('mode').value==='single'?'1':'12';clearSession();}syncMode();});$('mirror').addEventListener('change',()=>{updateLineLegend();resetAwarenessDisplay('mirror');});$('showLine').addEventListener('change',updateLineLegend);$('axis').addEventListener('change',updateLineLegend);$('dwell').addEventListener('input',updateLineLegend);
 function resetAwarenessDisplay(reason){
+  if(running&&awarenessOn())message('観察中です。確認できた姿勢点の位置関係を表示します。終了するには「停止」を押してください。');
   awareness.reset();postureTracker.reset();observations=new Map();clearTimeout(awarenessStaleTimer);
-  if(session)session.posture_awareness?.settings_changes.push({elapsed_seconds:session.elapsed_seconds||0,reason,enabled:awarenessOn(),mirror:$('mirror').checked});
+  if(session)session.posture_awareness?.settings_changes.push({elapsed_seconds:session.elapsed_seconds||0,reason,enabled:awarenessOn(),mirror:$('mirror').checked,view_mode:$('awarenessView').value});
   syncMode();if(lastTracks.length&&$('empty').hidden)render(lastTracks);
 }
 $('displayMode').addEventListener('change',()=>resetAwarenessDisplay('display_mode'));
+$('awarenessView').addEventListener('change',()=>resetAwarenessDisplay('view_mode'));
 async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else if($('viewer').requestFullscreen)await $('viewer').requestFullscreen();else throw new Error('このブラウザでは全画面表示を利用できません。Chrome / Edgeを使用してください。');}catch(error){message(`全画面表示: ${error.message}`);}}
 document.addEventListener('fullscreenchange',()=>{const active=document.fullscreenElement===$('viewer');$('fullscreen').setAttribute('aria-pressed',String(active));$('fullscreen').setAttribute('aria-label',active?'全画面を終了':'全画面表示');$('fullscreen').title=active?'全画面を終了（Escでも終了）':'全画面表示';$('fullscreenIcon').src=`vendor/icons/${active?'minimize':'maximize'}.svg`;updateRecordingStatus();updateScreenMetrics();});
 $('fullscreen').addEventListener('click',toggleFullscreen);$('screenCamera').addEventListener('click',()=>running||starting?stop():start());
