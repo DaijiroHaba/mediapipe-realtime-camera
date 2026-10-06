@@ -1,10 +1,12 @@
-import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.2.1';
+import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0';
 import {CanvasRecorder} from './recorder.mjs';
+import {openVideo,seekVideo} from './file-video.mjs';
 const $=id=>document.getElementById(id), video=$('video'), canvas=$('canvas'), ctx=canvas.getContext('2d');
 const snapshot=document.createElement('canvas'), snap=snapshot.getContext('2d');
 let worker=null,stream=null,running=false,busy=false,starting=false,generation=0,timer=null,watchdog=null,cancelInit=null;
 let tracker=new Tracker(),events=[],coordinates=[],session=null,lastFrame=-Infinity,lastVideoTime=-1,frames=0,firstFrame=null,lastResultTime=null;
-const locked=['mode','camera','maxPeople','posePeople','axis','line','dwell','radius','interestRegion','log','joint','minAngle','maxAngle','fps'];
+let fileSource=null,fileController=null,nextFileFrame=0,fileTiming=null;
+const locked=['mode','camera','maxPeople','posePeople','axis','line','dwell','radius','interestRegion','log','joint','minAngle','maxAngle','fps','inputMode','videoFile'];
 const eventNames={A_to_B:'通過 A → B',B_to_A:'通過 B → A',stop_start:'立ち止まり開始（推定）',interest_candidate:'関心候補（連続立ち止まり・一時ID初回）'};
 const palette=['#39ecc0','#ffd364','#ff91bb','#8bceff','#d9b0ff','#ffffff'];
 let recordingSession=null;
@@ -27,14 +29,15 @@ function updateRecordingStatus(){
   $('screenRecordStatus').textContent=$('recordStatusText').textContent;$('screenRecordStatus').dataset.recording=String(active);
   $('recordButtonIcon').src=active?'vendor/icons/square.svg':'vendor/icons/video.svg';$('recordButtonText').textContent=active?'録画を停止':'録画を開始';$('record').title=active?'録画を停止して端末内で動画を生成':'表示中の人物枠・ランドマークを含む映像の録画を開始';
   $('record').setAttribute('aria-label',active?'録画を停止':'録画を開始');
-  $('record').disabled=state==='stopping'||(!active&&(!running||frames<1||!recording.supported));$('record').dataset.recording=String(active);
+  $('record').disabled=state==='stopping'||(!active&&(!running||frames<1||!recording.supported||$('inputMode').value==='video'));$('record').dataset.recording=String(active);
   const cameraActive=running||starting;$('screenCamera').querySelector('img').src=`vendor/icons/${cameraActive?'camera-off':'camera'}.svg`;$('screenCamera').title=cameraActive?'カメラを停止':'カメラを開始';$('screenCamera').setAttribute('aria-label',$('screenCamera').title);$('screenCamera').disabled=state==='stopping'&&!cameraActive;
   $('saveRecording').disabled=state!=='idle'||!recording.blob;$('start').disabled=starting||running||state==='stopping';
   $('recordDetail').textContent=active?'映像を録画中です。音声は記録せず、この端末内に保持しています。':state==='stopping'?'録画は停止しました。動画ファイルを準備しています。':!recording.supported?'このブラウザではWebM録画に対応していません。Chrome / Edgeで使用してください。':recording.blob?`録画停止済み・${(recording.blob.size/1024/1024).toFixed(1)} MB。「動画を保存」で保存してください。録画の再開は自動では行いません。`:'録画はOFFです。録画開始を押した場合だけ映像を記録します。音声なし・端末内保存。';
+  if($('inputMode').value==='video'&&state==='idle')$('recordDetail').textContent='既存動画はフレーム単位で解析します。再録画せず、JSON・CSVで結果を保存します。';
 }
 function toggleRecording(){
   if(recording.state==='recording'){recording.stop('manual');return;}
-  if(!running||frames<1)return;
+  if(!running||frames<1||$('inputMode').value==='video')return;
   if(recording.blob&&!recording.saved&&!confirm('前回の録画が未保存です。前回分を破棄して新しく録画しますか？'))return;
   try{recordingSession=session;recording.start(canvas);}catch(error){message(`録画を開始できません: ${error.message}`);}
 }
@@ -46,7 +49,7 @@ async function refreshCameras(){
 }
 function initWorker(numPoses,token){
   return new Promise((resolve,reject)=>{
-    const w=new Worker('./pose-worker.js?v=1.2.1');worker=w;
+    const w=new Worker('./pose-worker.js?v=1.3.0');worker=w;
     const timeout=setTimeout(()=>reject(new Error('モデル初期化が45秒以内に完了しませんでした。vendor・modelsの配置を確認してください。')),45000);
     const rejectInit=error=>{clearTimeout(timeout);reject(error);};cancelInit=()=>rejectInit(new Error('開始を中止しました。'));
     w.onerror=e=>{if(token!==generation)return;const error=new Error(`推定エンジンを起動できません。ライブラリ配置・ブラウザを確認してください。${e.message||''}`);if(starting)rejectInit(error);else fail(error);};
@@ -54,28 +57,31 @@ function initWorker(numPoses,token){
       if(token!==generation)return;
       if(data.type==='ready'){clearTimeout(timeout);cancelInit=null;resolve(data.delegate);}
       else if(data.type==='error'){const error=new Error(data.message);if(starting)rejectInit(error);else fail(error);}
-      else if(data.type==='result'){clearTimeout(watchdog);if(running){consume(data);busy=false;schedule(token);}}
+      else if(data.type==='result'){clearTimeout(watchdog);if(running){consume(data);if(fileSource){session.frame_timing.push(fileTiming);nextFileFrame++;$('fileProgress').value=nextFileFrame/session.source.total_samples;$('fileProgressText').textContent=`${nextFileFrame} / ${session.source.total_samples} フレーム・動画時刻 ${fileTiming.mediaTime.toFixed(3)}秒`;}busy=false;schedule(token);}}
     };
     w.postMessage({type:'init',numPoses,maxPeople:Number($('maxPeople').value),mode:$('mode').value});
   });
 }
 async function start(){
   if(running||starting||recording.state==='stopping')return;
-  if(!navigator.mediaDevices?.getUserMedia){message('Chrome / Edge で HTTPS または localhost のURLを開いてください。');return;}
+  const fromFile=$('inputMode').value==='video',file=$('videoFile').files[0];
+  if(fromFile&&!file){message('解析する動画を選択してください。');return;}
+  if(!fromFile&&!navigator.mediaDevices?.getUserMedia){message('Chrome / Edge で HTTPS または localhost のURLを開いてください。');return;}
   const c=config(),min=Number($('minAngle').value),max=Number($('maxAngle').value);
   if(!Number.isFinite(c.dwell)||c.dwell<3||c.dwell>60||!Number.isFinite(min)||!Number.isFinite(max)||min<0||max>180||min>max){message('連続立ち止まり秒数（3〜60）と角度の上下限（0〜180）を確認してください。');return;}
   if(session&&!confirm('新しいセッションを開始すると現在のログを消去します。必要な結果は保存済みですか？'))return;
-  clearSession();starting=true;const token=++generation;controls(true);$('state').textContent='モデル準備中';message('ローカルの推定モデルを読み込んでいます。カメラ映像は外部へ送信しません。');
+  clearSession();$('fileProgress').value=0;$('fileProgressText').textContent='準備中';starting=true;const token=++generation;controls(true);$('state').textContent='モデル準備中';message('ローカルの推定モデルを読み込んでいます。映像は外部へ送信しません。');
   try{
     const delegate=await initWorker($('mode').value==='combined'?Number($('posePeople').value):Number($('maxPeople').value),token);
     if(token!==generation)return;
-    $('state').textContent='カメラ接続中';
-    const deviceId=$('camera').value;
-    const acquired=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{}),width:{ideal:960},height:{ideal:540},frameRate:{ideal:30}}});
-    if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}
-    stream=acquired;video.srcObject=stream;await video.play();
-    if(token!==generation)return;
-    stream.getVideoTracks()[0].addEventListener('ended',()=>{if(running)fail(new Error('カメラ接続が終了しました。USB接続を確認してください。'));},{once:true});
+    $('state').textContent=fromFile?'動画読み込み中':'カメラ接続中';
+    if(fromFile){fileController=new AbortController();const loaded=await openVideo(file,fileController.signal,video);if(token!==generation){loaded.close();return;}fileSource=loaded;nextFileFrame=0;}
+    else{const deviceId=$('camera').value;
+      const acquired=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(deviceId?{deviceId:{exact:deviceId}}:{}),width:{ideal:960},height:{ideal:540},frameRate:{ideal:30}}});
+      if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return;}
+      stream=acquired;video.srcObject=stream;await video.play();if(token!==generation)return;
+      stream.getVideoTracks()[0].addEventListener('ended',()=>{if(running)fail(new Error('カメラ接続が終了しました。USB接続を確認してください。'));},{once:true});
+    }
     canvas.width=snapshot.width=video.videoWidth;canvas.height=snapshot.height=video.videoHeight;
     starting=false;running=true;$('empty').hidden=true;$('state').textContent=`計測中 / ${delegate}`;$('state').dataset.active='true';
     const features=modeFeatures($('mode').value);
@@ -84,17 +90,20 @@ async function start(){
     session.model.pose_enabled=features.pose;session.model.person_detector_enabled=features.traffic;session.model.person_detector={name:'efficientdet_lite0',category:'person',score_threshold:.5};
     session.interest_definition={threshold_seconds:c.dwell,region:c.region,region_setting:$('interestRegion').value,position:'person bounding-box center',movement_tolerance_normalized:c.radius,denominator:'temporary IDs seen inside region',numerator:'temporary IDs with a continuous stationary episode inside region',deduplication:'once per continuous temporary ID per session; ID expiry can double count',actual_interest_validated:false};
     session.recordings=[];session.recording_policy={automatic:false,audio:false,max_seconds:recording.maxSeconds,max_bytes_approximate:recording.maxBytes,server_upload:false};
+    session.source=fromFile?{type:'video',filename:file.name,bytes:file.size,last_modified:file.lastModified,duration_s:fileSource.duration,total_samples:Math.ceil(fileSource.duration*session.requested_fps),sample_limit:3000,timing:'REQUESTED_SOURCE_SAMPLE_TIME_NOT_PROCESSING_TIME',counting_timestamp:'requestedTime',decoded_timestamp:'mediaTime in frame_timing; quantization depends on source frame rate'}:{type:'camera'};session.frame_timing=[];session.completion='RUNNING';
     session.tracking_rules={method:'greedy nearest center; countable state must match',gate:'maximum normalized center distance per match',maxGap:'seconds before temporary ID expires',deadBand:'normalized half-width about counting line',missing_detection:'reset crossing side and stop timer',counts:'crossing events and temporary-ID interest candidates, not unique people'};
-    $('export').disabled=false;message('計測中です。カメラを固定し、全身が入るようにしてください。終了するには「停止」を押してください。');await refreshCameras();schedule(token);
+    $('export').disabled=false;message(fromFile?'動画解析中です。通過・立ち止まりは元動画の時刻で判定します。動画の再録画は行いません。':'計測中です。カメラを固定し、全身が入るようにしてください。終了するには「停止」を押してください。');if(!fromFile)await refreshCameras();schedule(token);
   }catch(error){if(token===generation)fail(error);}
 }
-function schedule(token){clearTimeout(timer);timer=setTimeout(()=>capture(token),Math.max(0,1000/Number($('fps').value)-(performance.now()-lastFrame)));}
+function schedule(token){clearTimeout(timer);timer=setTimeout(()=>capture(token),fileSource?0:Math.max(0,1000/Number($('fps').value)-(performance.now()-lastFrame)));}
 async function capture(token){
   if(!running||busy||token!==generation)return;
   if(document.hidden){stop();message('非表示になったためカメラを停止しました。再開は新しいセッションになります。');return;}
-  if(video.readyState<2||video.currentTime===lastVideoTime){timer=setTimeout(()=>capture(token),30);return;}
+  if(!fileSource&&(video.readyState<2||video.currentTime===lastVideoTime)){timer=setTimeout(()=>capture(token),30);return;}
+  if(fileSource&&(nextFileFrame>=session.source.total_samples||nextFileFrame>=3000)){const reason=nextFileFrame>=session.source.total_samples?'COMPLETE':'FRAME_LIMIT';stop(reason);message(reason==='COMPLETE'?'動画解析が完了しました。JSON・CSVを保存できます。':'3,000フレームで停止しました。解析済みのJSON・CSVを保存できます。');return;}
   busy=true;lastVideoTime=video.currentTime;lastFrame=performance.now();
   try{
+    if(fileSource){fileTiming=await seekVideo(video,nextFileFrame/session.requested_fps,fileController.signal);if(!running||token!==generation)return;lastFrame=fileTiming.requestedTime*1000;}
     snap.drawImage(video,0,0,snapshot.width,snapshot.height);
     const bitmap=await createImageBitmap(snapshot);
     if(!running||token!==generation){bitmap.close();return;}
@@ -102,15 +111,16 @@ async function capture(token){
     worker.postMessage({type:'frame',time:lastFrame,bitmap},[bitmap]);
   }catch(error){if(token===generation)fail(error);}
 }
-function stop(){
+function stop(reason='USER_STOP'){
+  const preserve=!!fileSource&&['COMPLETE','FRAME_LIMIT'].includes(reason);
   recording.stop('camera_stop');
   generation++;running=false;starting=false;busy=false;clearTimeout(timer);clearTimeout(watchdog);cancelInit?.();cancelInit=null;worker?.terminate();worker=null;
-  stream?.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;
+  stream?.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;fileController?.abort();fileController=null;fileSource?.close();fileSource=null;
+  if(session&&session.completion==='RUNNING')session.completion=reason;
   if(session&&!session.ended_at)session.ended_at=new Date().toISOString();
-  controls(false);$('state').textContent='停止中';$('state').dataset.active='false';$('speed').textContent='0.0 fps';$('empty').hidden=false;ctx.clearRect(0,0,canvas.width,canvas.height);snap.clearRect(0,0,snapshot.width,snapshot.height);$('angle').textContent='--°';$('cue').textContent='カメラ停止中';$('cue').dataset.inrange='false';$('people').textContent='0';$('stopped').textContent='0';
-  $('bodyStatus').textContent='カメラ停止中です。';updateScreenMetrics();
+  controls(false);$('state').textContent=reason==='COMPLETE'?'動画解析完了':reason==='FRAME_LIMIT'?'フレーム上限で停止':'停止中';$('state').dataset.active='false';$('speed').textContent='0.0 fps';if(!preserve){$('empty').hidden=false;ctx.clearRect(0,0,canvas.width,canvas.height);snap.clearRect(0,0,snapshot.width,snapshot.height);$('angle').textContent='--°';$('cue').textContent='停止中';$('cue').dataset.inrange='false';$('people').textContent='0';$('stopped').textContent='0';$('bodyStatus').textContent='映像停止中です。';}updateScreenMetrics();
 }
-function fail(error){stop();message(`停止しました: ${error.message} （カメラの許可、他アプリによる占有、vendor/modelsの配置も確認してください）`);}
+function fail(error){if(session){session.error=String(error.message);session.completion='ERROR';}stop();message(`停止しました: ${error.message} （動画形式、カメラの許可、vendor/modelsの配置も確認してください）`);}
 function consume(data){
   if(firstFrame===null)firstFrame=data.time;
   const time=(data.time-firstFrame)/1000;
@@ -165,7 +175,7 @@ const name=suffix=>`realtime_${session?.started_at.replaceAll(/[:.]/g,'-')||'ses
 function saveRecording(){if(!recording.blob||recording.state!=='idle')return;download(recording.info.filename,recording.blob,recording.blob.type);recording.markSaved();}
 $('record').addEventListener('click',toggleRecording);$('saveRecording').addEventListener('click',saveRecording);
 $('start').addEventListener('click',start);$('stop').addEventListener('click',()=>{stop();message('カメラを停止しました。必要な結果を端末に保存できます。');});$('refresh').addEventListener('click',refreshCameras);
-$('reset').addEventListener('click',()=>{if(!session||confirm('現在のカウントと未保存ログを消去しますか？')){clearSession();message('カウントとログをリセットしました。');}});
+$('reset').addEventListener('click',()=>{if(!running&&!starting&&(!session||confirm('現在のカウントと未保存ログを消去しますか？'))){clearSession();message('カウントとログをリセットしました。');}});
 $('export').addEventListener('click',()=>{if(session)download(name('summary.json'),JSON.stringify({...session,exported_at:new Date().toISOString(),counts:{A_to_B:tracker.forward,B_to_A:tracker.reverse,stop_start:tracker.stopEvents,interest_candidate_temporary_ids:tracker.interestPeople,eligible_temporary_ids:tracker.eligiblePeople,interest_candidate_rate_percent:tracker.interestRate},event_rows:events.length,coordinate_rows:coordinates.length},null,2),'application/json');});
 $('eventCsv').addEventListener('click',()=>download(name('events.csv'),csv([['経過秒','一時ID','イベント','連続立ち止まり_秒','閾値_秒'],...events.map(e=>[Number(e.time.toFixed(3)),e.id,eventNames[e.type],e.dwell_seconds?.toFixed(3)??'',e.threshold_seconds??''])]),'text/csv;charset=utf-8'));
 $('coordCsv').addEventListener('click',()=>download(name('coordinates.csv'),csv([['経過秒','一時ID','ランドマーク番号','x_正規化','y_正規化','z_相対深度','visibility'],...coordinates]),'text/csv;charset=utf-8'));
@@ -177,4 +187,5 @@ async function toggleFullscreen(){try{if(document.fullscreenElement)await docume
 document.addEventListener('fullscreenchange',()=>{const active=document.fullscreenElement===$('viewer');$('fullscreen').setAttribute('aria-pressed',String(active));$('fullscreen').setAttribute('aria-label',active?'全画面を終了':'全画面表示');$('fullscreen').title=active?'全画面を終了（Escでも終了）':'全画面表示';$('fullscreenIcon').src=`vendor/icons/${active?'minimize':'maximize'}.svg`;updateRecordingStatus();updateScreenMetrics();});
 $('fullscreen').addEventListener('click',toggleFullscreen);$('screenCamera').addEventListener('click',()=>running||starting?stop():start());
 if(location.protocol==='file:')message('ファイルを直接開かず、公開先のHTTPS URLから開いてください。ローカル確認の起動方法はREADMEを参照してください。');
-syncMode();updateRecordingStatus();refreshCameras();
+function inputUI(){const file=$('inputMode').value==='video';$('videoInput').hidden=!file;$('cameraInput').hidden=file;$('fileProgressArea').hidden=!file;$('start').textContent=file?'動画解析を開始':'カメラを開始';$('refresh').hidden=file;$('recordDetail').textContent=file?'既存動画はフレーム単位で解析します。再録画は行わず、結果をJSON・CSVで保存します。':'録画はOFFです。';updateRecordingStatus();}
+$('inputMode').addEventListener('change',inputUI);inputUI();syncMode();updateRecordingStatus();refreshCameras();

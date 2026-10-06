@@ -32,3 +32,4 @@ header{position:sticky;top:0;z-index:20;flex-wrap:wrap}
 #viewer:fullscreen #screenMetrics{line-height:1.5;overflow-wrap:anywhere}
 .stats .traffic-stat{border-bottom:1px solid #e2e9e7}.stats #interestRate{font-size:26px}
 @media(max-width:500px){#viewer:fullscreen{padding:8px}#viewer:fullscreen .toolbar{gap:6px}.toolbar select{max-width:230px}#viewer:fullscreen .record-tools{gap:6px}}
+input[type=file]{max-width:100%;font-size:13px}#fileProgress{width:100%}#fileProgressText{overflow-wrap:anywhere}
