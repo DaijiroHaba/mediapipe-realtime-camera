@@ -1,9 +1,11 @@
 import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0';
 import {CanvasRecorder} from './recorder.mjs';
 import {openVideo,seekVideo} from './file-video.mjs';
-import {PostureAwareness,LIMITS,AWARENESS_VERSION,ambiguousPosePoints} from './posture-awareness.mjs?v=0.1.0';
-import {drawAwareness} from './posture-overlay.mjs?v=0.1.0';
+import {PostureAwareness,LIMITS,AWARENESS_VERSION,ambiguousPosePoints,postureDisplayDetection} from './posture-awareness.mjs?v=0.2.0';
+import {drawAwareness} from './posture-overlay.mjs?v=0.2.0';
 const awareness=new PostureAwareness();
+// Display continuity is independent of the legacy traffic counter's 0.75 s expiry.
+const postureTracker=new Tracker({maxGap:LIMITS.maxGapSeconds,gate:.12,countingEnabled:false});
 let observations=new Map(),lastTracks=[],awarenessStaleTimer=null;
 const awarenessOn=()=>document.getElementById('displayMode').value==='awareness'&&modeFeatures(document.getElementById('mode').value).pose;
 const $=id=>document.getElementById(id), video=$('video'), canvas=$('canvas'), ctx=canvas.getContext('2d');
@@ -24,7 +26,7 @@ const recording=new CanvasRecorder({onUpdate:updateRecordingStatus,onComplete:in
 function message(text){$('message').textContent=text;}
 function controls(active){for(const id of locked)$(id).disabled=active;$('start').disabled=active||recording.state==='stopping';$('stop').disabled=!active;$('reset').disabled=active;$('refresh').disabled=active;syncMode();updateRecordingStatus();}
 function config(){return {axis:$('axis').value,line:Number($('line').value)/100,dwell:Number($('dwell').value),radius:Number($('radius').value),countingEnabled:modeFeatures($('mode').value).traffic,region:interestRegion($('interestRegion').value)};}
-function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();}
+function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();if(awarenessOn()&&!running)$('bodyStatus').textContent='顔から腰までを画面中央に映してください。足先は不要です。左右に少し傾けると表示が変わります。';$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();}
 function setPeopleOptions(){const traffic=modeFeatures($('mode').value).traffic,previous=$('maxPeople').value;const values=traffic?[1,2,4,6,8,12,20]:[1,2,4];$('maxPeople').replaceChildren(...values.map(n=>new Option(`${n}人${n>4?'（試行）':''}`,String(n))));$('maxPeople').value=values.includes(Number(previous))?previous:traffic?'12':'4';}
 function updateLineLegend(){const f=modeFeatures($('mode').value),c=running?tracker.config:config(),mirror=$('mirror').checked;$('lineLegend').hidden=!f.traffic;const sides=c.axis==='x'?(mirror?'A＝画面の右、B＝画面の左（左右反転中）':'A＝画面の左、B＝画面の右'):'A＝画面の上、B＝画面の下';$('lineLegend').textContent=`通過計数：${sides}。人物枠の中心が線を越えた回数を計数します。${$('showLine').checked?'':'線は非表示ですが、計数は継続します。'}`;$('interestNote').textContent=`関心候補は対象範囲内で連続${c.dwell}秒以上立ち止まった一時IDです。注視・関心そのものは判定しません。IDが変わると同じ人を再計数する可能性があります。`;}
 function updateRecordingStatus(){
@@ -46,7 +48,7 @@ function toggleRecording(){
   if(recording.blob&&!recording.saved&&!confirm('前回の録画が未保存です。前回分を破棄して新しく録画しますか？'))return;
   try{recordingSession=session;recording.start(canvas);}catch(error){message(`録画を開始できません: ${error.message}`);}
 }
-function clearSession(){clearTimeout(awarenessStaleTimer);awareness.reset();observations=new Map();lastTracks=[];tracker=new Tracker(config());events=[];coordinates=[];session=null;frames=0;firstFrame=null;lastFrame=-Infinity;lastVideoTime=-1;lastResultTime=null;updateStats([]);$('angle').textContent='--°';$('cue').textContent='カメラ停止中';$('cue').dataset.inrange='false';const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=3;cell.textContent='記録はありません';row.append(cell);$('events').replaceChildren(row);for(const id of ['export','coordCsv','eventCsv'])$(id).disabled=true;$('logState').textContent='座標記録は録画とは別設定です。イベントは最大10,000件。音声は記録しません。';}
+function clearSession(){clearTimeout(awarenessStaleTimer);awareness.reset();postureTracker.reset();observations=new Map();lastTracks=[];tracker=new Tracker(config());events=[];coordinates=[];session=null;frames=0;firstFrame=null;lastFrame=-Infinity;lastVideoTime=-1;lastResultTime=null;updateStats([]);$('angle').textContent='--°';$('cue').textContent='カメラ停止中';$('cue').dataset.inrange='false';const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=3;cell.textContent='記録はありません';row.append(cell);$('events').replaceChildren(row);for(const id of ['export','coordCsv','eventCsv'])$(id).disabled=true;$('logState').textContent='座標記録は録画とは別設定です。イベントは最大10,000件。音声は記録しません。';}
 async function refreshCameras(){
   if(!navigator.mediaDevices){message('HTTPS または localhost で開いてください。カメラAPIを利用できません。');return;}
   try{const previous=$('camera').value,devices=await navigator.mediaDevices.enumerateDevices();$('camera').replaceChildren(new Option('既定のカメラ',''));devices.filter(d=>d.kind==='videoinput').forEach((d,i)=>$('camera').add(new Option(d.label||`カメラ ${i+1}（開始後に名称表示）`,d.deviceId)));if([...$('camera').options].some(o=>o.value===previous))$('camera').value=previous;}
@@ -94,7 +96,7 @@ async function start(){
     session.model={name:'pose_landmarker_full',tasks_vision_version:'0.10.21',confidence_thresholds:MODEL_THRESHOLDS,landmark_visibility_threshold:.5};
     session.model.pose_enabled=features.pose;session.model.person_detector_enabled=features.traffic;session.model.person_detector={name:'efficientdet_lite0',category:'person',score_threshold:.5};
     session.interest_definition={threshold_seconds:c.dwell,region:c.region,region_setting:$('interestRegion').value,position:'person bounding-box center',movement_tolerance_normalized:c.radius,denominator:'temporary IDs seen inside region',numerator:'temporary IDs with a continuous stationary episode inside region',deduplication:'once per continuous temporary ID per session; ID expiry can double count',actual_interest_validated:false};
-    session.posture_awareness={version:AWARENESS_VERSION,enabled_at_start:awarenessOn(),settings_changes:[],thresholds:LIMITS,threshold_basis:'engineering display heuristics; not clinical cutoffs',coordinates:'aspect-corrected source 2D; direction is displayed screen left/right',validation:'SYNTHETIC_SOFTWARE_ONLY; field accuracy and learning benefit unvalidated',findings_saved:false};
+    session.posture_awareness={version:AWARENESS_VERSION,enabled_at_start:awarenessOn(),display_tracking:postureTracker.config,display_id_prefix:'P',settings_changes:[],thresholds:LIMITS,threshold_basis:'engineering display heuristics; not clinical cutoffs',coordinates:'aspect-corrected source 2D; direction is displayed screen left/right',validation:'SYNTHETIC_SOFTWARE_ONLY; field accuracy and learning benefit unvalidated',findings_saved:false};
     session.recordings=[];session.recording_policy={automatic:false,audio:false,max_seconds:recording.maxSeconds,max_bytes_approximate:recording.maxBytes,server_upload:false};
     session.source=fromFile?{type:'video',filename:file.name,bytes:file.size,last_modified:file.lastModified,duration_s:fileSource.duration,total_samples:Math.ceil(fileSource.duration*session.requested_fps),sample_limit:3000,timing:'REQUESTED_SOURCE_SAMPLE_TIME_NOT_PROCESSING_TIME',counting_timestamp:'requestedTime',decoded_timestamp:'mediaTime in frame_timing; quantization depends on source frame rate'}:{type:'camera'};session.frame_timing=[];session.completion='RUNNING';
     session.tracking_rules={method:'greedy nearest center; countable state must match',gate:'maximum normalized center distance per match',maxGap:'seconds before temporary ID expires',deadBand:'normalized half-width about counting line',missing_detection:'reset crossing side and stop timer',counts:'crossing events and temporary-ID interest candidates, not unique people'};
@@ -125,7 +127,7 @@ function stop(reason='USER_STOP'){
   stream?.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;fileController?.abort();fileController=null;fileSource?.close();fileSource=null;
   if(session&&session.completion==='RUNNING')session.completion=reason;
   if(session&&!session.ended_at)session.ended_at=new Date().toISOString();
-  if(!preserve){awareness.reset();observations=new Map();lastTracks=[];}
+  if(!preserve){awareness.reset();postureTracker.reset();observations=new Map();lastTracks=[];}
   controls(false);$('state').textContent=reason==='COMPLETE'?'動画解析完了':reason==='FRAME_LIMIT'?'フレーム上限で停止':'停止中';$('state').dataset.active='false';$('speed').textContent='0.0 fps';if(!preserve){$('empty').hidden=false;ctx.clearRect(0,0,canvas.width,canvas.height);snap.clearRect(0,0,snapshot.width,snapshot.height);$('angle').textContent='--°';$('cue').textContent='停止中';$('cue').dataset.inrange='false';$('people').textContent='0';$('stopped').textContent='0';$('bodyStatus').textContent='映像停止中です。';}updateScreenMetrics();
 }
 function fail(error){if(session){session.error=String(error.message);session.completion='ERROR';}stop();message(`停止しました: ${error.message} （動画形式、カメラの許可、vendor/modelsの配置も確認してください）`);}
@@ -138,11 +140,11 @@ function consume(data){
   const detections=features.traffic?(features.pose?combineDetections(data.people||[],poses):(data.people||[])):poses;
   if(features.pose&&features.traffic){const ambiguous=ambiguousPosePoints(data.people||[],poses);for(const d of detections)d.poseAssociationAmbiguous=ambiguous.has(d.points);}
   const result=tracker.update(detections,time);
-  lastTracks=result.tracks;
+  lastTracks=awarenessOn()?postureTracker.update(detections.map(d=>postureDisplayDetection(d,canvas.width,canvas.height)),time).tracks.map(t=>({...t,id:`P${t.id}`,displayIndex:t.id})):result.tracks;
   clearTimeout(awarenessStaleTimer);
-  if(awarenessOn()){observations=awareness.update(result.tracks,time,canvas.width,canvas.height,$('mirror').checked);
-    awarenessStaleTimer=setTimeout(()=>{if(running&&awarenessOn()){awareness.reset();observations=new Map(lastTracks.map(t=>[t.id,{findings:[],text:'映像の更新を確認中'}]));render(lastTracks);}},800);
-  }else {awareness.reset();observations=new Map();}
+  if(awarenessOn()){observations=awareness.update(lastTracks,time,canvas.width,canvas.height,$('mirror').checked);
+    awarenessStaleTimer=setTimeout(()=>{if(running&&awarenessOn()){awareness.reset();postureTracker.reset();observations=new Map(lastTracks.map(t=>[t.id,{findings:[],text:'映像の処理待ちです・人数を減らすと速くなります'}]));render(lastTracks);}},LIMITS.maxGapSeconds*1000);
+  }else {awareness.reset();postureTracker.reset();observations=new Map();}
   frames++;session.processed_frames=frames;if(detections.length)session.detected_frames++;
   session.elapsed_seconds=Number(time.toFixed(3));
   for(const event of result.events){if(events.length<10000)events.push(event);else session.events_truncated=true;}
@@ -155,9 +157,10 @@ function consume(data){
   if(session.coordinates_truncated||session.events_truncated)$('logState').textContent='記録上限に達しました。一部ログは省略されています。要約のtruncatedフラグを確認してください。';
   $('coordCsv').disabled=!coordinates.length;$('eventCsv').disabled=!events.length;
   $('speed').textContent=`${time>0?((frames-1)/time).toFixed(1):'0.0'} fps`;
-  updateStats(result.tracks);render(result.tracks);updateRecordingStatus();
+  updateStats(result.tracks);render(lastTracks);updateRecordingStatus();
   const full=result.tracks.filter(t=>t.fullBody).length,withPose=result.tracks.filter(t=>t.points.length>0);
   $('bodyStatus').textContent=!result.tracks.length?'人物を検出していません。照明とカメラの画角を確認してください。':!features.pose?`人物枠 ${result.tracks.length}人（推定）。骨格・注視は推定していません。`:features.traffic?`人物枠 ${result.tracks.length}人 / 骨格対応 ${withPose.length}人 / 全身検出 ${full}人。枠に対応しない骨格は計数に使用しません。`:`全身検出 ${full}人 / 部分検出 ${result.tracks.length-full}人。頭と両足が入る画角で使用してください。`;
+  if(awarenessOn()){const ready=[...observations.values()].filter(o=>o.status==='ready'||o.status==='observed').length;$('bodyStatus').textContent=result.tracks.length?`姿勢表示 ${ready}人 / 検出 ${result.tracks.length}人。顔と肩を映して左右に少し傾けてみましょう。上体の表示には腰まで必要です。足先は不要です。`:'顔から腰までを画面中央に映してください。カメラは水平に固定してください。';}
   const p=features.pose&&withPose.length===1?withPose[0].points:null;
   const angle=p?angle2D(p,$('joint').value,canvas.width,canvas.height):null;
   $('angle').textContent=angle===null?'--°':`${angle.toFixed(1)}°`;
@@ -173,7 +176,7 @@ function render(tracks){
   ctx.save();if(mirror){ctx.translate(w,0);ctx.scale(-1,1);}ctx.drawImage(snapshot,0,0,w,h);ctx.restore();
   ctx.lineWidth=3;ctx.font='16px sans-serif';
   for(const t of tracks){
-    const color=palette[(t.id-1)%palette.length];ctx.strokeStyle=color;ctx.fillStyle=color;
+    const color=palette[((t.displayIndex??t.id)-1)%palette.length];ctx.strokeStyle=color;ctx.fillStyle=color;
     if(modeFeatures($('mode').value).pose&&$('skeleton').checked){ctx.beginPath();for(const [a,b] of EDGES)if(visible(t.points[a])&&visible(t.points[b])){ctx.moveTo(x(t.points[a].x),y(t.points[a].y));ctx.lineTo(x(t.points[b].x),y(t.points[b].y));}ctx.stroke();for(const p of t.points)if(visible(p)){ctx.beginPath();ctx.arc(x(p.x),y(p.y),3,0,2*Math.PI);ctx.fill();}}
     if($('boxes').checked||awarenessOn()){const b=t.box,bx=Math.min(x(b.x),x(b.x+b.w)),by=awarenessOn()?Math.min(h,Math.max(22,y(b.y)+24)):Math.max(22,y(b.y));ctx.strokeRect(bx,y(b.y),b.w*w,b.h*h);const label=awarenessOn()?`#${t.id}`:`#${t.id} ${t.points.length?(t.fullBody?'全身':'部分骨格'):'人物枠'}${t.still?' / 関心候補':''}${!t.countable?' / 腰未検出':''}`;const labelWidth=Math.min(w,Math.max(80,b.w*w),ctx.measureText(label).width+14),lx=Math.max(0,Math.min(bx,w-labelWidth));ctx.fillStyle='#152523';ctx.fillRect(lx,by-22,labelWidth,22);ctx.fillStyle=color;ctx.fillText(label,lx+6,by-6,Math.max(1,labelWidth-12));}
   }
@@ -199,7 +202,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||
 window.addEventListener('beforeunload',event=>{if(recording.state!=='idle'||(recording.blob&&!recording.saved)){event.preventDefault();event.returnValue='';}});
 $('mode').addEventListener('change',()=>{if(!running&&!starting){if(session&&!confirm('モード変更で現在のログをリセットします。必要な結果は保存済みですか？')){$('mode').value=session.mode;return;}setPeopleOptions();$('maxPeople').value=$('mode').value==='single'?'1':'12';clearSession();}syncMode();});$('mirror').addEventListener('change',()=>{updateLineLegend();resetAwarenessDisplay('mirror');});$('showLine').addEventListener('change',updateLineLegend);$('axis').addEventListener('change',updateLineLegend);$('dwell').addEventListener('input',updateLineLegend);
 function resetAwarenessDisplay(reason){
-  awareness.reset();observations=new Map();clearTimeout(awarenessStaleTimer);
+  awareness.reset();postureTracker.reset();observations=new Map();clearTimeout(awarenessStaleTimer);
   if(session)session.posture_awareness?.settings_changes.push({elapsed_seconds:session.elapsed_seconds||0,reason,enabled:awarenessOn(),mirror:$('mirror').checked});
   syncMode();if(lastTracks.length&&$('empty').hidden)render(lastTracks);
 }

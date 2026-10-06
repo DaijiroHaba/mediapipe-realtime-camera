@@ -37,7 +37,7 @@ export function drawAwareness(ctx,tracks,observations,width,height,mirror){
   const compact=tracks.length>6,cardWidth=Math.min(width-8,(compact?230:340)*scale),pad=10*scale;
   ctx.save();ctx.font=`600 ${font}px system-ui, "Yu Gothic", sans-serif`;
   const items=tracks.map(t=>{
-    const value=observations.get(t.id)||{text:'姿勢を確認中',findings:[]};
+    const value=observations.get(t.id)||{text:'顔と両肩を画面中央に映してください',findings:[]};
     const sourceRows=value.findings.length?value.findings:[{kind:'checking',sign:0,text:value.text}];
     const rows=sourceRows.map(row=>({...row,lines:linesFor(ctx,row.text,cardWidth-icon-pad*3)}));
     const rowsHeight=rows.reduce((n,row)=>n+Math.max(icon,row.lines.length*lineHeight)+8*scale,0);
