@@ -1,6 +1,6 @@
 // Display-only, image-plane observations. All limits are engineering heuristics,
 // not clinical cutoffs or validated probabilities. See POSTURE_AWARENESS.md.
-export const AWARENESS_VERSION = '0.3.0';
+export const AWARENESS_VERSION = '0.3.1';
 const KINDS=['trunk','head','shoulder','forwardTrunk','headForward','knee'];
 const emptyCurrent=()=>Object.fromEntries(KINDS.map(k=>[k,0]));
 export const LIMITS = Object.freeze({
@@ -14,6 +14,7 @@ export const LIMITS = Object.freeze({
   kneeOn: 35, kneeOff: 25, sideWeakVisibility: .35, sidePairProjectionMax: .35,
   sideNoseEarMinPx: 8, sideEyeRatioMax: .7, minSideNeckPx: 24, minLegSegmentPx: 40,
   tauSeconds: .12, confirmSeconds: .25, warmupSeconds: .25, minSamples: 2,
+  slowIntervalSeconds: .5, minSlowSamples: 3, minFootDirectionPx: 16,
   maxGapSeconds: 2.5, maxHipSpeed: .45, maxPointSpeed: 1.4,
   maxLegSpeed: .65, maxScaleSpeed: .25,
   overlapFraction: .08, maxFindings: 2
@@ -56,7 +57,8 @@ export function measurePose(points,width,height) {
   else if(hip.y-shoulder.y<torso*.7||shoulderWidth/torso<LIMITS.shoulderTorsoMin||shoulderWidth/torso>LIMITS.shoulderTorsoMax||hipWidth/shoulderWidth<LIMITS.hipShoulderMin||hipWidth/shoulderWidth>LIMITS.hipShoulderMax||
     !depthOK(11,12,shoulderWidth,LIMITS.shoulderDepthRatioMax)||!depthOK(23,24,hipWidth,LIMITS.hipDepthRatioMax))unavailable.trunk='上体の撮影方向を確認できません';
   else values.trunk=Math.atan2(shoulder.x-hip.x,hip.y-shoulder.y)*rad;
-  if(!shoulders||shoulderWidth<LIMITS.minShoulderPx)unavailable.shoulder=unavailable.trunk;
+  if(!shoulders)unavailable.shoulder=clipped([11,12])?'肩が画面から切れています':'肩の位置を確認できません';
+  else if(shoulderWidth<LIMITS.minShoulderPx)unavailable.shoulder='肩の姿勢点が小さく、所見を保留しています';
   else if(!faceFront||!depthOK(11,12,shoulderWidth,LIMITS.shoulderDepthRatioMax))unavailable.shoulder='顔と肩の位置を確認できません';
   else values.shoulder=lineAngle(p[11],p[12]);
   if(!eyesGood||!earsGood)unavailable.head='顔の向きを確認できません';
@@ -93,6 +95,11 @@ export function measureSidePose(points,width,height,preferredChain=null) {
   if([2,5].every(weak)&&Math.abs(p[2].x-p[5].x)>Math.abs(dx)*LIMITS.sideEyeRatioMax)return hold('not_profile','側面の撮影方向を確認できません');
   const pairs=[[11,12],[23,24]].filter(pair=>pair.every(weak));
   if(!reference||!pairs.length||pairs.some(([a,b])=>Math.abs(p[a].x-p[b].x)>reference*LIMITS.sidePairProjectionMax))return hold('not_profile','斜め向きのため側面所見を保留しています');
+  const heel=c.name==='left'?29:30,toe=c.name==='left'?31:32;
+  const footDx=[heel,toe].every(good)?p[toe].x-p[heel].x:0;
+  const footFacing=Math.abs(footDx)>=LIMITS.minFootDirectionPx?Math.sign(footDx):null;
+  // Face and foot agreement is a proxy, not a measured body axis. Without agreement use screen words only.
+  const axisSupported=footFacing!==null&&footFacing===facing;
   const values={forwardTrunk:null,headForward:null,knee:null},unavailable={};
   if(!hip)unavailable.forwardTrunk='肩と腰の位置がそろって確認できません';
   else if(torso<LIMITS.minTorsoPx||hip.y-sh.y<torso*.45)unavailable.forwardTrunk='上体の傾きを確認できません';
@@ -104,11 +111,13 @@ export function measureSidePose(points,width,height,preferredChain=null) {
     const knee=p[c.knee],ankle=p[c.ankle],thigh=dist(hip,knee),shin=dist(knee,ankle);
     if(Math.min(thigh,shin)<LIMITS.minLegSegmentPx||thigh/shin<.4||thigh/shin>2.5||ankle.y<=hip.y)unavailable.knee='脚の輪郭が不十分なため膝所見を保留しています';
     else {const a={x:hip.x-knee.x,y:hip.y-knee.y},b={x:ankle.x-knee.x,y:ankle.y-knee.y};
-      values.knee=180-Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/(thigh*shin))))*rad;}
+      const angle=180-Math.acos(Math.max(-1,Math.min(1,(a.x*b.x+a.y*b.y)/(thigh*shin))))*rad;
+      if(angle>10&&(footFacing||facing)*(a.x*b.y-a.y*b.x)>0)unavailable.knee='膝の曲がる方向が不確かで、所見を保留しています';
+      else values.knee=angle;}
   }
   const available=Object.keys(values).filter(k=>values[k]!==null);
   if(!available.length)return {...hold('side_quality',unavailable.forwardTrunk||unavailable.headForward),unavailable};
-  return {status:'measured',view:'side',signature:`side:${c.name}:${facing}`,chain:c.name,facing,hip,torso,
+  return {status:'measured',view:'side',signature:`side:${c.name}:${facing}`,chain:c.name,facing,footFacing,axisSupported,hip,torso,
     motionScale:torso||Math.max(36,neck*2.5),pixels:p,values,available,unavailable,
     motionIndices:[0,c.ear,c.shoulder,c.hip].filter(good),legIndices:[c.knee,c.ankle].filter(good)};
 }
@@ -147,15 +156,16 @@ export function ambiguousPosePoints(people,poses) {
 }
 function swept(a,b){return {x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),w:Math.max(a.x+a.w,b.x+b.w)-Math.min(a.x,b.x),h:Math.max(a.y+a.h,b.y+b.h)-Math.min(a.y,b.y)};}
 function overlapsEnough(a,b){return overlap(a,b)/Math.max(1e-8,Math.min(a.w*a.h,b.w*b.h))>LIMITS.overlapFraction;}
-export function findingText(kind,sign,mirror=false,facing=1) {
+export function findingText(kind,sign,mirror=false,facing=1,axisSupported=true) {
+  if(['forwardTrunk','headForward'].includes(kind)&&!axisSupported){const direction=sign*facing*(mirror?-1:1),side=direction>0?'右':'左';return {kind,sign:direction,facing:facing*(mirror?-1:1),text:kind==='forwardTrunk'?`横から見た上体が画面${side}へ傾いて見えます`:`頭の位置が肩より画面${side}に見えます`};}
   if(['forwardTrunk','headForward','knee'].includes(kind))return {kind,sign:kind==='knee'?(mirror?-facing:facing):sign*facing*(mirror?-1:1),facing:facing*(mirror?-1:1),text:
     kind==='forwardTrunk'?`上体が${sign>0?'前方':'後方'}へ傾いて見えます`:kind==='headForward'?`頭の位置が肩より${sign>0?'前':'後ろ'}に見えます`:'見えている膝が曲がって見えます'};
   const s=mirror?-sign:sign,side=s>0?'右':'左';
   return {kind,sign:s,text:kind==='trunk'?`上体が画面${side}へ傾いて見えます`:kind==='head'?`頭が画面${side}へ傾いて見えます`:'左右の肩に高さの差が見えます'};
 }
-export function neutralDescription(kind,value,facing=1,mirror=false) {
+export function neutralDescription(kind,value,facing=1,mirror=false,axisSupported=true) {
   const text={trunk:'上体の左右への傾きは小さく見えます',head:'頭の左右への傾きは小さく見えます',shoulder:'左右の肩の高さは近く見えます',
-    forwardTrunk:'肩と腰の線は縦方向に近く見えます',headForward:'耳と肩の前後のずれは小さく見えます',
+    forwardTrunk:'肩と腰の線は縦方向に近く見えます',headForward:axisSupported?'耳と肩の前後のずれは小さく見えます':'耳と肩の横方向のずれは小さく見えます',
     knee:value<=10?'股・膝・足首は伸びた並びに近く見えます':'膝の小さな曲がりは判定を保留します'}[kind];
   return {kind,sign:0,facing:facing*(mirror?-1:1),text,neutral:true};
 }
@@ -202,7 +212,7 @@ export class PostureAwareness {
       const measured=measureObservation(t.points,width,height,viewMode,state?.previous?.chain);
       if(measured.status!=='measured'){this.states.delete(t.id);result.set(t.id,measured);continue;}
       if(state?.previous?.signature!==measured.signature)state=null;
-      if(!state){state={start:time,samples:0,previous:measured,values:{...measured.values},current:emptyCurrent(),pending:{}};this.states.set(t.id,state);}
+      if(!state){state={start:time,samples:0,previous:measured,values:{...measured.values},current:emptyCurrent(),pending:{},evidence:{}};this.states.set(t.id,state);}
       if(dt>0&&state.previous){
         const scale=Math.max(measured.motionScale,state.previous.motionScale,36),hipSpeed=measured.hip&&state.previous.hip?dist(measured.hip,state.previous.hip)/scale/dt:0;
         const shared=measured.motionIndices.filter(i=>state.previous.motionIndices.includes(i));
@@ -211,14 +221,18 @@ export class PostureAwareness {
         const legSpeed=Math.max(0,...legs.map(i=>dist(measured.pixels[i],state.previous.pixels[i])/scale/dt));
         const scaleSpeed=measured.torso&&state.previous.torso?Math.abs(measured.torso-state.previous.torso)/scale/dt:0;
         if(hipSpeed>LIMITS.maxHipSpeed||pointSpeed>LIMITS.maxPointSpeed||legSpeed>LIMITS.maxLegSpeed||scaleSpeed>LIMITS.maxScaleSpeed){
-          state.previous=measured;state.start=time;state.samples=0;state.current=emptyCurrent();state.pending={};state.values={...measured.values};result.set(t.id,hold('motion','移動・動作中のため姿勢所見を保留しています'));continue;
+          state.previous=measured;state.start=time;state.samples=0;state.current=emptyCurrent();state.pending={};state.evidence={};state.axisEvidence=null;state.values={...measured.values};result.set(t.id,hold('motion','移動・動作中のため姿勢所見を保留しています'));continue;
         }
       }
       state.samples++;
+      const requiredSamples=dt>=LIMITS.slowIntervalSeconds?LIMITS.minSlowSamples:LIMITS.minSamples;
+      if(measured.axisSupported){state.axisEvidence??={since:time,samples:0};state.axisEvidence.samples++;}else state.axisEvidence=null;
+      const axisConfirmed=!!state.axisEvidence&&state.axisEvidence.samples>=requiredSamples&&time-state.axisEvidence.since>=LIMITS.warmupSeconds;
       const alpha=dt>0?1-Math.exp(-dt/LIMITS.tauSeconds):1;
       for(const k of KINDS){
         const value=measured.values[k];
-        if(value==null){state.values[k]=null;state.current[k]=0;delete state.pending[k];continue;}
+        if(value==null){state.values[k]=null;state.current[k]=0;delete state.pending[k];delete state.evidence[k];continue;}
+        state.evidence[k]??={since:time,samples:0};state.evidence[k].samples++;
         state.values[k]=state.values[k]==null?value:state.values[k]+alpha*(value-state.values[k]);
         const target=schmitt(state.values[k],state.current[k],LIMITS[`${k}On`],LIMITS[`${k}Off`]);
         // A changed sign or falling below the exit boundary suppresses stale findings immediately.
@@ -230,10 +244,12 @@ export class PostureAwareness {
         }
       }
       state.previous=measured;
-      if(time-state.start<LIMITS.warmupSeconds||state.samples<LIMITS.minSamples){result.set(t.id,hold('warming','姿勢の位置関係を確認中'));continue;}
+      if(time-state.start<LIMITS.warmupSeconds||state.samples<requiredSamples){result.set(t.id,hold('warming','姿勢の位置関係を確認中'));continue;}
+      const confirmed=k=>state.evidence[k]?.samples>=requiredSamples&&time-state.evidence[k].since>=LIMITS.warmupSeconds;
       const priority=measured.view==='side'?['forwardTrunk','knee','headForward']:['trunk','head','shoulder'];
-      const findings=priority.filter(k=>state.current[k]).slice(0,LIMITS.maxFindings).map(k=>findingText(k,state.current[k],mirror,measured.facing));
-      const descriptions=priority.filter(k=>measured.available.includes(k)&&!state.current[k]).slice(0,LIMITS.maxFindings-findings.length).map(k=>state.pending[k]?{kind:'checking',sign:0,text:'姿勢の位置関係を確認中'}:neutralDescription(k,state.values[k],measured.facing,mirror));
+      const iconFacing=k=>k==='knee'?(measured.footFacing??measured.facing):measured.facing;
+      const findings=priority.filter(k=>state.current[k]&&confirmed(k)).slice(0,LIMITS.maxFindings).map(k=>findingText(k,state.current[k],mirror,iconFacing(k),axisConfirmed));
+      const descriptions=priority.filter(k=>measured.available.includes(k)&&(!state.current[k]||!confirmed(k))).slice(0,LIMITS.maxFindings-findings.length).map(k=>state.pending[k]||!confirmed(k)?{kind:'checking',sign:0,text:'姿勢の位置関係を確認中'}:neutralDescription(k,state.values[k],iconFacing(k),mirror,axisConfirmed));
       result.set(t.id,{status:findings.length?'observed':'ready',reason:findings.length?'image_relation':'no_active_cue',findings,
         view:measured.view,descriptions,available:measured.available,unavailable:measured.unavailable,
         text:findings.length?'':descriptions[0]?.text||'必要な姿勢点を確認中'});
