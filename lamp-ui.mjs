@@ -1,7 +1,7 @@
 // @ts-check
-import {LampGame,GAME_VERSION} from './lamp-game.mjs';
+import {LampGame,GAME_VERSION} from './lamp-game.mjs?v=0.5.3';
 import {FingerTracker,fingerObservations,selectOneCursor} from './lamp-tracker.mjs';
-import {LampPerformance} from './lamp-performance.mjs';
+import {LampPerformance} from './lamp-performance.mjs?v=0.5.3';
 import {CameraLease} from './camera-lease.mjs';
 import {mapCursor,mouseCursor,viewTransform} from './lamp-input.mjs';
 import {mountResults} from './lamp-result-ui.mjs';
@@ -13,6 +13,8 @@ export function mountLampGame({standalone=false}={}){
  const panel=document.createElement('section');panel.id='lampPanel';panel.hidden=true;
  panel.innerHTML=`<p class="lamp-intro">両人差し指ランプ消灯デモ ${GAME_VERSION}｜まず座位で、無理なく届く配置を確認してください</p>
  <div class="lamp-controls"><button id="lampPrepare">準備</button><button id="lampPractice">練習</button><button id="lampStart" class="primary">30秒を開始</button><button id="lampPause">一時停止</button><button id="lampResume">再開</button><button id="lampEnd">終了</button><button id="lampStop">停止・カメラ終了</button><button id="lampReset">リセット</button></div>
+ <label id="lampStandingLabel" class="check" hidden><input id="lampStandingReady" type="checkbox">立位：足を動かさず届く配置・姿勢・周囲・必要時の見守りを確認</label>
+ <p id="lampReadyStatus" class="lamp-ready-status" role="status"></p><div id="lampLayoutActions" class="lamp-controls" hidden><button id="lampTryGrid">同じ個数で整列に変更</button><button id="lampTryFewer">12個に変更</button></div>
  <p id="lampStatus" role="status">マウスでも操作できます。まず準備を押してください。</p>
  <div id="lampBoard" class="lamp-board" tabindex="0" aria-label="人差し指カーソルの中心が点灯円へ外から入ると消灯します"><video id="lampVideo" playsinline muted aria-hidden="true"></video><div id="lampTargets"></div><div id="lampCursor1" class="lamp-cursor" hidden></div><div id="lampCursor2" class="lamp-cursor second" hidden></div><div id="lampCue" class="lamp-cue" role="status" aria-live="polite" hidden><strong id="lampCueText"></strong></div></div>
  <p id="lampInputStatus" class="lamp-input-status" role="status"><span id="lampInputHint"></span><small id="lampCueHold"></small></p><p id="lampLayout" class="lamp-layout" role="status"></p><div class="lamp-metrics" id="lampMetrics"></div>
@@ -28,7 +30,7 @@ export function mountLampGame({standalone=false}={}){
  <label>配置するランプ<select id="lampCount"><option value="30">30個（6列×5行）</option><option value="50">50個（10列×5行）</option><option value="12">12個（4列×3行）</option><option value="6">6個（3列×2行）</option></select></label>
  <label>配置方式<select id="lampPlacement"><option value="grid">整列</option><option value="random">ランダム（開始時に固定）</option></select></label><label>配置seed（空欄＝毎回生成）<input id="lampSeed" type="number" min="0" max="4294967295" step="1" placeholder="検証時だけ数値を指定"></label><label>姿勢<select id="lampPosture"><option value="seated">座位（初期設定）</option><option value="standing">立位</option></select></label>
  <p id="lampSafety" class="note">安定した椅子で、無理なく届く範囲を準備で調整してください。痛みや疲れがあれば中止してください。</p>
- <label id="lampStandingLabel" class="check" hidden><input id="lampStandingReady" type="checkbox">立位：足を動かさず届く配置・姿勢・周囲・必要時の見守りを確認</label>
+ 
  <label>点灯方式<select id="lampPattern"><option value="sequential">基本：1つずつ</option><option value="timed">定期：上限1〜4個</option></select></label>
  <label>レベル（新点灯の間隔）<select id="lampLevel"><option value="3">ゆっくり：3秒</option><option value="2" selected>標準：2秒</option><option value="1.25">速め：1.25秒</option><option value=".5">0.5秒</option><option value=".25">0.25秒</option></select></label>
  <label>点灯の失効時間<select id="lampLifetime"><option value="1">1秒</option><option value="2">2秒</option><option value="4">4秒</option><option value="6" selected>6秒</option><option value="10">10秒</option></select></label>
@@ -38,14 +40,15 @@ export function mountLampGame({standalone=false}={}){
  </div><label class="check"><input id="lampMirror" type="checkbox" checked>手と映像を左右反転</label><label class="check"><input id="lampPreview" type="checkbox" checked>カメラのライブ映像を重ねる</label>
  <details><summary>速さの比較設定</summary><label>解析の目標頻度<select id="lampFps"><option value="30">30 fps（目標）</option><option value="15">15 fps（比較用）</option></select></label>
  <label>カメラ要求解像度<select id="lampResolution"><option value="960x540">960×540（基本）</option><option value="640x360">640×360（速度比較）</option><option value="1280x720">1280×720（画質比較）</option></select></label>
- <label>解析エンジン<select id="lampDelegate"><option value="auto">GPU優先・失敗時CPU</option><option value="CPU">CPU（比較用）</option></select></label><p class="note">設定の変更は実施前に行います。高fps・高解像度が位置精度の向上を保証するものではありません。</p></details>
+ <label>解析エンジン<select id="lampDelegate"><option value="auto">GPU優先・失敗時CPU</option><option value="CPU">CPU（比較用）</option></select></label><p class="note">基本は960×540・目標30fps・平滑化なし。GPUとCPUの速さは端末で比較してください。設定は実施前に変更します。640×360は比較用で、指先の揺れや欠測が増える場合は基本へ戻してください。高fps・高解像度が精度の向上を保証するものではありません。</p></details>
  <p class="note">両人差し指をカメラに見せ、点灯円の外から入れてください。円内への進入が当たり範囲です。指先を検出できないときに掌へ自動切替しません。先端の点が操作点です。番号1／2と丸／三角は追跡用で、本人の左右ではありません。録画・ランドマーク保存・外部送信はありません。結果CSVは本人が保存を押した場合だけ出力します。</p>`;
  aside.append(settings);
  const board=$('lampBoard'),video=$('lampVideo'),game=new LampGame(),tracker=new FingerTracker(),perf=new LampPerformance();
  const results=mountResults($('lampResults'));
  for(let i=1;i<=2;i++)$(`lampCursor${i}`).innerHTML=`<svg aria-hidden="true" viewBox="-10 -10 42 46"><path class="pointer-hand" d="M-3 6V0Q-3-4 0-4T3 0V13L5 10Q7 8 9 11L11 10Q14 9 15 12L17 12Q21 13 21 18L20 27Q19 32 15 32H8Q5 32 3 28L-4 17Q-6 13-3 12L1 17V6Z"/>${i===1?'<circle class="tip-dot" cx="0" cy="0" r="4"/>':'<path class="tip-dot" d="M0-5L5 4H-5Z"/>'}<circle class="tip-center" cx="0" cy="0" r="1"/></svg><span class="cursor-number">${i}</span><span class="cursor-hold">保留</span>`;
+ let deviceRequest=0;
  let active=false,prepared=false,stream=null,worker=null,generation=0,busy=false,raf=null,videoCallback=null,pendingCancel=null,watchdog=null;
- let lastCapture=-Infinity,lastVideo=-1,lastObservedVideo=-1,lastHands=-Infinity,lastSubmitted=0,cursors=[],mouse=null,firstHand=null;
+ let lastCapture=-Infinity,lastVideo=-1,lastObservedVideo=-1,latestFrameTime=-1,lastHands=-Infinity,lastSubmitted=0,cursors=[],mouse=null,firstHand=null;
  let sourceTracks=[],observationReasons=[],videoTransformKey='';
  let connecting=false,cameraReady=false,cameraText='停止中',trackingText='マウス待機',lastSlow=-Infinity,layoutKey='',targetNodes=[],slots=[null,null],wasLocked=false;
  const nowMs=()=>performance.now(),time=()=>nowMs()/1000,size=()=>{const r=board.getBoundingClientRect();return {w:r.width-2*board.clientLeft||960,h:r.height-2*board.clientTop||540};};
@@ -58,30 +61,35 @@ export function mountLampGame({standalone=false}={}){
   game.record?.closeQuality(time());generation++;connecting=false;cameraReady=false;pendingCancel?.();pendingCancel=null;clearTimeout(watchdog);watchdog=null;
   if(videoCallback!==null&&video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(videoCallback);videoCallback=null;
   worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;
-  busy=false;sourceTracks=[];observationReasons=[];lastHands=-Infinity;lastCapture=-Infinity;lastVideo=-1;lastObservedVideo=-1;cursors=[];slots=[null,null];tracker.reset();firstHand=null;cameraText='停止中';lease.release();
+  busy=false;sourceTracks=[];observationReasons=[];lastHands=-Infinity;lastCapture=-Infinity;lastVideo=-1;lastObservedVideo=-1;latestFrameTime=-1;cursors=[];slots=[null,null];tracker.reset();firstHand=null;cameraText='停止中';lease.release();
  }
  async function refreshCameras(){
   if(!navigator.mediaDevices?.enumerateDevices)return;
+  const request=++deviceRequest,token=generation;
   try{const selected=$('lampCamera').value,devices=await navigator.mediaDevices.enumerateDevices();
+   if(!active||request!==deviceRequest||token!==generation)return;
    $('lampCamera').replaceChildren(new Option('既定のカメラ',''));devices.filter(d=>d.kind==='videoinput').forEach((d,i)=>$('lampCamera').add(new Option(d.label||`カメラ ${i+1}（接続後に名称表示）`,d.deviceId)));
    if([...$('lampCamera').options].some(o=>o.value===selected))$('lampCamera').value=selected;
-  }catch{setStatus('カメラ一覧を取得できませんでした。既定のカメラで試してください。');}
+  }catch{if(active&&request===deviceRequest&&token===generation)setStatus('カメラ一覧を取得できませんでした。既定のカメラで試してください。');}
  }
  async function sendFrame(stamp){
-  if(!active||!cameraReady||!worker||!stream||busy||video.readyState<2||video.currentTime===lastVideo)return;
+  const mediaTime=video.requestVideoFrameCallback?latestFrameTime:video.currentTime;
+  if(!active||!cameraReady||!worker||!stream||busy||video.readyState<2||mediaTime<0||mediaTime===lastVideo)return;
   if(stamp-lastCapture<1000/Number($('lampFps').value)-2)return;
-  const token=generation;busy=true;lastCapture=stamp;lastSubmitted=stamp;lastVideo=video.currentTime;perf.submit();
+  const token=generation;busy=true;lastCapture=stamp;lastSubmitted=stamp;lastVideo=mediaTime;perf.submit(stamp);
   try{
    const bitmap=await createImageBitmap(video);
+   // releaseCamera owns generation changes and resets busy; this bitmap belongs to the old camera.
    if(token!==generation||!worker){bitmap.close();return;}
    clearTimeout(watchdog);watchdog=setTimeout(()=>{if(token===generation){game.pause(time(),'analysis_timeout');releaseCamera();setStatus('解析が応答しないため停止しました。準備から再接続できます。');render(true);}},perf.samples.length?3000:15000);
-   worker.postMessage({type:'frame',bitmap,time:stamp,bitmapMs:nowMs()-stamp},[bitmap]);
+   worker.postMessage({type:'frame',bitmap,time:stamp,sourceMediaTime:mediaTime,bitmapMs:nowMs()-stamp},[bitmap]);
   }catch(e){if(token===generation){busy=false;game.input([],time(),size().w,size().h);setStatus('映像フレームを取得できませんでした。');}}
  }
  function pumpVideo(token){
   if(!video.requestVideoFrameCallback)return;
-  videoCallback=video.requestVideoFrameCallback(stamp=>{
+  videoCallback=video.requestVideoFrameCallback((stamp,metadata)=>{
    videoCallback=null;if(token!==generation||!cameraReady)return;
+   latestFrameTime=Number.isFinite(metadata?.mediaTime)?metadata.mediaTime:video.currentTime;
    perf.cameraFrame(stamp);if(busy)perf.busySkipped++;else void sendFrame(nowMs());
    pumpVideo(token);
   });
@@ -115,16 +123,21 @@ export function mountLampGame({standalone=false}={}){
     perf.consume({submittedAt,receivedAt:stamp,inferenceMs:data.inferenceMs,bitmapMs:data.bitmapMs,accepted});
     if(game.state==='playing')game.record?.sample({now:stamp/1000,inferenceMs:data.inferenceMs,softwareMs:stamp-submittedAt,accepted,delegate:perf.delegate});
     const {w,h}=size();
-    if(!accepted){cursors=[];tracker.reset();game.input([],stamp/1000,w,h);trackingText='解析が遅れています・判定保留';lastHands=-Infinity;render(true);return;}
+    if(!accepted){cursors=[];tracker.reset();game.input([],stamp/1000,w,h);trackingText='解析が遅れています・判定保留';lastHands=-Infinity;render(true);void sendFrame(nowMs());return;}
     lastHands=submittedAt/1000;
     const observation=fingerObservations(data,false);observationReasons=observation.reasons;
     let tracks=tracker.update(observation.points,stamp/1000,video.videoWidth/video.videoHeight,game.config.smoothing);
     if($('lampHands').value==='one'){const selected=selectOneCursor(tracks,firstHand);firstHand=selected.id;tracks=selected.cursors;}
     sourceTracks=tracks;updateMappedCursors();
     game.input(cursors,stamp/1000,w,h);
+    // Apply the result now; do not add another RAF of cursor delay. No extrapolation.
+    renderCursors();perf.cursorWritten(stamp,nowMs());
+    // A newer camera frame may already exist while inference was busy.
+    // sendFrame still enforces one in-flight frame, distinct mediaTime and target fps.
+    void sendFrame(nowMs());
    };
    current.onerror=()=>{if(token===generation){game.pause(time(),'model_error');releaseCamera();setStatus('手モデルが停止しました。');render(true);}};
-   cameraReady=true;connecting=false;game.record?.runtime(time(),perf.settings,perf.delegate);pumpVideo(token);await refreshCameras();
+   cameraReady=true;connecting=false;game.record?.runtime(time(),perf.settings,perf.delegate);pumpVideo(token);void refreshCameras();
    setStatus('両人差し指をカメラに見せ、点灯円の外から入れてください。');render(true);return true;
   }catch(e){if(token===generation){releaseCamera();setStatus(`準備できませんでした：${e.message}。マウスでも操作できます。`);render(true);}return false;}
  }
@@ -150,11 +163,19 @@ export function mountLampGame({standalone=false}={}){
   if($('lampPosture').value==='standing'&&!$('lampStandingReady').checked){setStatus('立位の配置と周囲を確認してください。');return;}
   if(!prepared&&!await prepare())return;
   if(!layout().valid){setStatus('配置間隔が不足しています。画面を広げるか、ランプを12個／6個に減らしてください。無理に到達範囲を広げないでください。');render(true);return;}
-  if($('lampInput').value==='hand'&&!cameraReady)return;
-  game.context={input:$('lampInput').value,hands:$('lampHands').value,camera_requested:$('lampInput').value==='hand'?$('lampResolution').value:null,camera_actual:$('lampInput').value==='hand'?{...perf.settings}:null,camera_selection:$('lampInput').value==='hand'?($('lampCamera').value?'selected':'default'):'not_used',analysis_target_fps:$('lampInput').value==='hand'?Number($('lampFps').value):null,delegate:$('lampInput').value==='hand'?perf.delegate:'not_used',delegate_requested:$('lampDelegate').value,preview:$('lampPreview').checked,video_width_px:$('lampInput').value==='hand'?video.videoWidth:null,video_height_px:$('lampInput').value==='hand'?video.videoHeight:null};
+  if($('lampInput').value==='hand'&&!cameraReady){if(!await camera())return;}
+  if(!active)return;
+  game.context={input:$('lampInput').value,hands:$('lampHands').value,frame_pipeline:'latest-only/result-driven/0.5.2',camera_requested:$('lampInput').value==='hand'?$('lampResolution').value:null,camera_actual:$('lampInput').value==='hand'?{...perf.settings}:null,camera_selection:$('lampInput').value==='hand'?($('lampCamera').value?'selected':'default'):'not_used',analysis_target_fps:$('lampInput').value==='hand'?Number($('lampFps').value):null,delegate:$('lampInput').value==='hand'?perf.delegate:'not_used',delegate_requested:$('lampDelegate').value,preview:$('lampPreview').checked,video_width_px:$('lampInput').value==='hand'?video.videoWidth:null,video_height_px:$('lampInput').value==='hand'?video.videoHeight:null};
   const {w,h}=size();const started=practice?game.start(time(),true,w,h):game.beginCountdown(time(),w,h);
   if(!started){setStatus(game.layout(w,h).reason);render(true);return;}
   setStatus(practice?'練習中。無理なく届く範囲で試してください。':'3 → 2 → 1 → Goで開始します。手／マウスの入力がない間はカウントダウンも止まります。');render(true);
+ }
+ function renderCursors(){
+  slots=slots.map(id=>cursors.some(c=>c.id===id)?id:null);for(const c of cursors)if(!slots.includes(c.id)){const i=slots.indexOf(null);if(i>=0)slots[i]=c.id;}
+  for(let i=0;i<2;i++){const n=$(`lampCursor${i+1}`),c=cursors.find(t=>t.id===slots[i]);n.hidden=!c||c.visible===false;
+   if(c){const left=`${c.x*100}%`,top=`${c.y*100}%`;if(n.style.left!==left)n.style.left=left;if(n.style.top!==top)n.style.top=top;n.classList.toggle('checking',!c.eligible);n.classList.toggle('flip-x',c.x>.88);n.classList.toggle('flip-y',c.y>.85);n.dataset.eligible=String(c.eligible);n.dataset.track=c.id;const scoring=game.cursors.find(t=>t.id===c.id);n.dataset.scoreX=scoring?String(scoring.x):'';n.dataset.scoreY=scoring?String(scoring.y):'';}
+   showText(n.querySelector('.cursor-number'),$('lampInput').value==='mouse'?'M':String(i+1));n.setAttribute('aria-label',`追跡${i+1} ${c?.eligible?'採点可能':'保留'}`);
+  }
  }
  function render(force=false){
   const stamp=nowMs(),{w,h}=size(),geometry=game.layout(w,h),count=game.targets.length;
@@ -172,11 +193,7 @@ export function mountLampGame({standalone=false}={}){
    if(n.dataset.state===state)return;n.dataset.state=state;n.classList.toggle('lit',t.active);
    showText(n,`${i+1}${t.active?' ★':t.outcome==='消灯'?' ✓':''}`);n.setAttribute('aria-label',`標的${i+1} ${state}`);n.title=`標的${i+1} ${state}`;
   });
-  slots=slots.map(id=>cursors.some(c=>c.id===id)?id:null);for(const c of cursors)if(!slots.includes(c.id)){const i=slots.indexOf(null);if(i>=0)slots[i]=c.id;}
-  for(let i=0;i<2;i++){const n=$(`lampCursor${i+1}`),c=cursors.find(t=>t.id===slots[i]);n.hidden=!c||c.visible===false;
-   if(c){n.style.left=`${c.x*100}%`;n.style.top=`${c.y*100}%`;n.classList.toggle('checking',!c.eligible);n.classList.toggle('flip-x',c.x>.88);n.classList.toggle('flip-y',c.y>.85);n.dataset.eligible=String(c.eligible);n.dataset.track=c.id;const scoring=game.cursors.find(t=>t.id===c.id);n.dataset.scoreX=scoring?String(scoring.x):'';n.dataset.scoreY=scoring?String(scoring.y):'';}
-   showText(n.querySelector('.cursor-number'),$('lampInput').value==='mouse'?'M':String(i+1));n.setAttribute('aria-label',`追跡${i+1} ${c?.eligible?'採点可能':'保留'}`);
-  }
+  renderCursors();
   const cue=game.cue(stamp/1000),cueNode=$('lampCue'),cueKey=cue.kind+'/'+cue.text;
   if(cueNode.dataset.cue!==cueKey){lastSlow=-Infinity;cueNode.dataset.cue=cueKey;cueNode.dataset.transitions=String(Number(cueNode.dataset.transitions||0)+1);cueNode.dataset.kind=cue.kind;showText($('lampCueText'),cue.text);}
   cueNode.hidden=!cue.text;showText($('lampCueHold'),['countdown','playing','paused'].includes(game.state)?(game.state==='paused'?'一時停止・時計停止':!game.tracking?'入力待ち・時計停止':''):'');
@@ -190,11 +207,22 @@ export function mountLampGame({standalone=false}={}){
   showText($('lampMetrics'),`${phase}${['playing','countdown'].includes(game.state)&&!game.tracking?'（入力待ち・時計停止）':''}｜${game.practice?'練習':`残り ${remaining.toFixed(1)}秒`}｜得点 ${s.score}点｜出題 ${s.issued}｜消灯 ${s.extinguished}｜失効 ${s.expired}｜残灯 ${s.remaining}｜観測応答時間中央値 ${s.response_median_ms===null?'—':`${Math.round(s.response_median_ms)} ms`}（${s.response_samples}件）`);
   results.update(game.lastResult,game.state==='ended'||game.state==='ready');
   const p=perf.snapshot(stamp),gameInfo=`画面更新 ${p.gameFps.toFixed(1)} fps｜ゲーム更新＋DOM書込 p95 ${p.gameP95===null?'—':p.gameP95.toFixed(2)+' ms'}`,fmt=v=>v===null?'—':`${v.toFixed(1)} ms`;
-  showText($('lampPerformance'),$('lampInput').value==='mouse'?`マウス入力・手AI停止｜${gameInfo}`:`${p.delegate}｜カメラ設定 ${p.settings.width??'—'}×${p.settings.height??'—'} / ${p.settings.frameRate??'—'} fps｜映像更新 ${p.cameraObservedFps.toFixed(1)} fps｜解析結果 ${p.inferenceFps.toFixed(1)} fps（目標${$('lampFps').value}）｜推論 中央値 ${fmt(p.inferenceP50)}・p95 ${fmt(p.inferenceP95)}｜取得開始→結果受領 p95 ${fmt(p.softwareP95)}｜古い結果の保留 ${p.rejected}件｜${gameInfo}`);
+  showText($('lampPerformance'),$('lampInput').value==='mouse'?`マウス入力・手AI停止｜${gameInfo}`:`${p.delegate}｜カメラ設定 ${p.settings.width??'—'}×${p.settings.height??'—'} / ${p.settings.frameRate??'—'} fps｜映像更新 ${p.cameraObservedFps.toFixed(1)} fps｜解析結果 ${p.inferenceFps.toFixed(1)} fps（目標${$('lampFps').value}）｜推論 中央値 ${fmt(p.inferenceP50)}・p95 ${fmt(p.inferenceP95)}｜取得開始→結果受領 p95 ${fmt(p.softwareP95)}｜結果後→次取得 p95 ${fmt(p.captureIdleP95)}｜結果受領→カーソル書込 p95 ${fmt(p.cursorWriteP95)}｜画像取得 p95 ${fmt(p.bitmapP95)}｜古い結果の保留 ${p.rejected}件｜${gameInfo}`);
   const locked=['countdown','playing','paused'].includes(game.state)||connecting;
   if(force||locked!==wasLocked){for(const id of lockedIds)$(id).disabled=locked;wasLocked=locked;}
   for(const id of ['lampPrepare','lampPractice','lampStart'])$(id).disabled=locked;
   const safe=$('lampPosture').value!=='standing'||$('lampStandingReady').checked;
+  const reasons=[];
+  if(connecting)reasons.push('カメラ・手モデルを準備中です');
+  if(!safe)reasons.push('立位では、上の確認チェックを選ぶと開始できます。配置変更後は再確認してください。安全に届く配置と周囲を確認してください');
+  if(!geometry.valid)reasons.push(geometry.reason+'。整列への変更・個数を減らす・全画面表示を試してください');
+  showText($('lampReadyStatus'),reasons.length?'開始できない理由：'+reasons.join('／'):['countdown','playing','paused'].includes(game.state)?'実施中の条件は固定です。停止・再開・終了を選べます。':'開始できます。練習または30秒を開始を選んでください。');
+  $('lampReadyStatus').dataset.ready=String(!reasons.length);
+  $('lampLayoutActions').hidden=geometry.valid||locked;
+  $('lampTryGrid').hidden=$('lampPlacement').value!=='random';
+  $('lampTryGrid').disabled=$('lampTryFewer').disabled=locked;
+  $('lampTryFewer').hidden=Number($('lampCount').value)<=6;
+  showText($('lampTryFewer'),Number($('lampCount').value)>12?'12個に変更':'6個に変更');
   $('lampPractice').disabled=locked||!safe||!geometry.valid;
   $('lampStart').disabled=(locked&&!game.practice)||connecting||!safe||!geometry.valid;
   $('lampPause').disabled=!['playing','countdown'].includes(game.state);$('lampResume').disabled=game.state!=='paused'||!geometry.valid||connecting;
@@ -208,7 +236,6 @@ export function mountLampGame({standalone=false}={}){
   else{
    if(now-lastHands>MAX_RESULT_AGE_MS/1000){sourceTracks=[];cursors=[];tracker.reset();game.input([],now,w,h);if(!trackingText.includes('解析が遅れ'))trackingText='手をカメラに映してください・追跡待ち';}
    if(cameraReady&&!video.requestVideoFrameCallback&&video.readyState>=2&&video.currentTime!==lastObservedVideo){lastObservedVideo=video.currentTime;perf.cameraFrame(nowMs());if(busy)perf.busySkipped++;else void sendFrame(nowMs());}
-   if(sourceTracks.length){updateMappedCursors();game.input(cursors,now,w,h);}
    if(!layout().valid)game.input([],now,w,h);game.tick(time(),w,h);
   }
   render();perf.recordGame(nowMs()-loopStarted,nowMs());raf=requestAnimationFrame(loop);
@@ -224,6 +251,9 @@ export function mountLampGame({standalone=false}={}){
   showText($('lampSafety'),$('lampPosture').value==='standing'?'立位：足を動かさず届く範囲で、姿勢・周囲・必要時の見守りを確認してください。カメラは安全性を保証しません。':'座位：安定した椅子で無理なく届く配置を確認。痛みや疲れがあれば中止してください。');render(true);
  });
  for(const id of ['lampFps','lampResolution','lampDelegate','lampCamera','lampHands','lampMirror'])$(id).addEventListener('change',reset);
+ for(const id of ['lampPractice','lampStart'])$(id).setAttribute('aria-describedby','lampReadyStatus');
+ $('lampTryGrid').onclick=()=>{if(['countdown','playing','paused'].includes(game.state)||connecting)return;$('lampPlacement').value='grid';$('lampPlacement').dispatchEvent(new Event('input'));setStatus('整列へ変更しました。立位では配置を確認してからチェックを選んでください。');};
+ $('lampTryFewer').onclick=()=>{if(['countdown','playing','paused'].includes(game.state)||connecting)return;$('lampCount').value=Number($('lampCount').value)>12?'12':'6';$('lampCount').dispatchEvent(new Event('input'));setStatus('ランプ数を変更しました。立位では配置を確認してからチェックを選んでください。');};
  $('lampStandingReady').onchange=()=>render(true);$('lampPreview').onchange=()=>render(true);$('lampRefresh').onclick=refreshCameras;
  board.onpointermove=e=>{if($('lampInput').value!=='mouse')return;const r=board.getBoundingClientRect();mouse={x:(e.clientX-r.left-board.clientLeft)/size().w,y:(e.clientY-r.top-board.clientTop)/size().h};};
  board.onpointerleave=()=>{mouse=null;};

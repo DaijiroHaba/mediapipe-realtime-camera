@@ -40,3 +40,8 @@ body.lamp-mode #viewer:fullscreen #lampPanel .lamp-board{width:min(100%,calc(65v
 #lampPanel .lamp-result-table{overflow:auto;max-height:360px}#lampPanel .lamp-result-table table{width:100%;border-collapse:collapse;background:#fff;color:#183a3c;font-size:12px}
 #lampPanel .lamp-result-table th,#lampPanel .lamp-result-table td{padding:6px;border:1px solid #aac6be;text-align:left;white-space:nowrap}#lampPanel .lamp-result-table thead{position:sticky;top:0;background:#deece6}
 #lampDownloadLinks{display:flex;gap:16px;flex-wrap:wrap}#lampDownloadLinks a{color:#125d70;text-decoration:underline}#lampPanel .lamp-csv-help{margin-top:10px}
+
+/* 0.5.3: start blockers and standing confirmation beside start controls. */
+#lampPanel .lamp-ready-status,#lampPanel #lampStandingLabel{display:block;background:#e1eeea;color:#183a3c;padding:8px 10px;margin:8px 0;line-height:1.6;font-size:14px;border:1px solid #8eaaa3;border-radius:5px}
+#lampPanel #lampStandingLabel input{width:18px;height:18px;vertical-align:middle;margin-right:8px}
+#lampPanel #lampLayoutActions button{background:#fff;color:#183a3c;border:1px solid #527574}

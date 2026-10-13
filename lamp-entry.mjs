@@ -1,4 +1,4 @@
-import {mountLampGame} from './lamp-ui.mjs';
+import {mountLampGame} from './lamp-ui.mjs?v=0.5.3';
 mountLampGame({standalone:true});
 const viewer=document.getElementById('viewer'),button=document.getElementById('fullscreen');
 button.addEventListener('click',async()=>{

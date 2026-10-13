@@ -3,7 +3,7 @@ import {createLayout,geometry} from './lamp-layout.mjs';
 import {LampRecord,aggregate} from './lamp-record.mjs';
 export {targetPositions,targetLayout} from './lamp-layout.mjs';
 /** @typedef {{id:string,x:number,y:number,eligible:boolean,visible?:boolean}} Cursor */
-export const GAME_VERSION='0.5.1';
+export const GAME_VERSION='0.5.3';
 export const DEFAULT_GAME={duration:30,interval:2,lifetime:6,maxActive:2,pattern:'sequential',lampCount:30,placement:'grid',seed:-1,mapMode:'image',mirror:true,smoothing:false,width:.48,height:.46,cx:.5,cy:.56,posture:'seated'};
 /** @typedef {typeof DEFAULT_GAME} GameSettings */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
