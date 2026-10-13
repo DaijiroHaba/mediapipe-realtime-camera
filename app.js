@@ -1,4 +1,6 @@
-import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0';
+import {CameraLease} from './camera-lease.mjs';
+import {mountLampGame} from './lamp-ui.mjs';
+import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0-lamp-0.5.1';
 import {CanvasRecorder} from './recorder.mjs';
 import {openVideo,seekVideo} from './file-video.mjs';
 import {PostureAwareness,LIMITS,AWARENESS_VERSION,ambiguousPosePoints,postureDisplayDetection} from './posture-awareness.mjs?v=0.3.1';
@@ -17,6 +19,9 @@ const locked=['mode','camera','maxPeople','posePeople','axis','line','dwell','ra
 const eventNames={A_to_B:'通過 A → B',B_to_A:'通過 B → A',stop_start:'立ち止まり開始（推定）',interest_candidate:'関心候補（連続立ち止まり・一時ID初回）'};
 const palette=['#39ecc0','#ffd364','#ff91bb','#8bceff','#d9b0ff','#ffffff'];
 let recordingSession=null;
+let lampUI=null;
+const cameraLease=new CameraLease(()=>{if(running||starting){stop('OTHER_CAMERA_PAGE');message('別の画面でカメラを開始したため停止しました。');}});
+const originalHeader=document.querySelector('header>div>span').textContent;
 const recording=new CanvasRecorder({onUpdate:updateRecordingStatus,onComplete:info=>{
   info.filename=`realtime_${info.started_at.replaceAll(/[:.]/g,'-')}_${recordingSession?.features.pose?'landmarked':'person_boxes'}${info.error?'_partial':''}.webm`;
   recordingSession?.recordings.push({...info});
@@ -26,7 +31,7 @@ const recording=new CanvasRecorder({onUpdate:updateRecordingStatus,onComplete:in
 function message(text){$('message').textContent=text;}
 function controls(active){for(const id of locked)$(id).disabled=active;$('start').disabled=active||recording.state==='stopping';$('stop').disabled=!active;$('reset').disabled=active;$('refresh').disabled=active;syncMode();updateRecordingStatus();}
 function config(){return {axis:$('axis').value,line:Number($('line').value)/100,dwell:Number($('dwell').value),radius:Number($('radius').value),countingEnabled:modeFeatures($('mode').value).traffic,region:interestRegion($('interestRegion').value)};}
-function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();$('awarenessViewSetting').hidden=!awarenessOn();$('awarenessView').disabled=!f.pose||!awarenessOn();if(awarenessOn()&&!running)$('bodyStatus').textContent='自然な姿勢の位置関係を表示します。上体には肩と腰、側面の膝には股・膝・足首が必要です。';$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();}
+function syncMode(){const f=modeFeatures($('mode').value);$('stats').dataset.mode=f.traffic?'multi':'single';$('trafficSettings').hidden=!f.traffic;$('eventSection').hidden=!f.traffic;$('interestNote').hidden=!f.traffic;$('angleSettings').hidden=!f.pose||awarenessOn();$('feedback').hidden=!f.pose||awarenessOn();$('displayMode').disabled=!f.pose;$('awarenessNote').hidden=!awarenessOn();$('boxes').disabled=awarenessOn();$('awarenessViewSetting').hidden=!awarenessOn();$('awarenessView').disabled=!f.pose||!awarenessOn();if(awarenessOn()&&!running)$('bodyStatus').textContent='自然な姿勢の位置関係を表示します。上体には肩と腰、側面の膝には股・膝・足首が必要です。';$('maxPeople').disabled=running||starting;$('posePeopleSetting').hidden=$('mode').value!=='combined';$('maxPeopleLabel').textContent=f.traffic?'最大人物枠人数':'最大ランドマーク人数';$('skeleton').disabled=!f.pose;$('log').disabled=running||starting||!f.pose;$('peopleSettingNote').textContent=running||starting?'人数とモードの変更には、いったんカメラを停止してください。':'人数・モードはカメラ停止中に変更できます。2人を写す場合は2人以上を選択してください。';$('engineNote').textContent=f.traffic?'人流は人物検出モデルの枠中心で計数します。骨格の検出数とは一致しない場合があります。':'人物枠は姿勢点の範囲です。顔認識枠ではありません。脚が映らない場合は部分検出です。';updateLineLegend();syncLampMode();}
 function setPeopleOptions(){const traffic=modeFeatures($('mode').value).traffic,previous=$('maxPeople').value;const values=traffic?[1,2,4,6,8,12,20]:[1,2,4];$('maxPeople').replaceChildren(...values.map(n=>new Option(`${n}人${n>4?'（試行）':''}`,String(n))));$('maxPeople').value=values.includes(Number(previous))?previous:traffic?'12':'4';}
 function updateLineLegend(){const f=modeFeatures($('mode').value),c=running?tracker.config:config(),mirror=$('mirror').checked;$('lineLegend').hidden=!f.traffic;const sides=c.axis==='x'?(mirror?'A＝画面の右、B＝画面の左（左右反転中）':'A＝画面の左、B＝画面の右'):'A＝画面の上、B＝画面の下';$('lineLegend').textContent=`通過計数：${sides}。人物枠の中心が線を越えた回数を計数します。${$('showLine').checked?'':'線は非表示ですが、計数は継続します。'}`;$('interestNote').textContent=`関心候補は対象範囲内で連続${c.dwell}秒以上立ち止まった一時IDです。注視・関心そのものは判定しません。IDが変わると同じ人を再計数する可能性があります。`;}
 function updateRecordingStatus(){
@@ -70,6 +75,7 @@ function initWorker(numPoses,token){
   });
 }
 async function start(){
+  if($('mode').value==='lamp')return;
   if(running||starting||recording.state==='stopping')return;
   const fromFile=$('inputMode').value==='video',file=$('videoFile').files[0];
   if(fromFile&&!file){message('解析する動画を選択してください。');return;}
@@ -77,6 +83,7 @@ async function start(){
   const c=config(),min=Number($('minAngle').value),max=Number($('maxAngle').value);
   if(!Number.isFinite(c.dwell)||c.dwell<3||c.dwell>60||!Number.isFinite(min)||!Number.isFinite(max)||min<0||max>180||min>max){message('連続立ち止まり秒数（3〜60）と角度の上下限（0〜180）を確認してください。');return;}
   if(session&&!confirm('新しいセッションを開始すると現在のログを消去します。必要な結果は保存済みですか？'))return;
+  if(!fromFile)cameraLease.claim();
   clearSession();$('fileProgress').value=0;$('fileProgressText').textContent='準備中';starting=true;const token=++generation;controls(true);$('state').textContent='モデル準備中';message('ローカルの推定モデルを読み込んでいます。映像は外部へ送信しません。');
   try{
     const delegate=await initWorker($('mode').value==='combined'?Number($('posePeople').value):Number($('maxPeople').value),token);
@@ -120,6 +127,7 @@ async function capture(token){
   }catch(error){if(token===generation)fail(error);}
 }
 function stop(reason='USER_STOP'){
+  cameraLease.release();
   clearTimeout(awarenessStaleTimer);
   const preserve=!!fileSource&&['COMPLETE','FRAME_LIMIT'].includes(reason);
   recording.stop('camera_stop');
@@ -200,7 +208,7 @@ $('coordCsv').addEventListener('click',()=>download(name('coordinates.csv'),csv(
 $('fps').addEventListener('input',()=>$('fpsLabel').textContent=`${$('fps').value} fps`);$('line').addEventListener('input',()=>$('lineLabel').textContent=`${$('line').value}%`);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||starting)){stop();message('タブが非表示になったためカメラと録画を停止しました。完了後に動画を保存できます。');}});window.addEventListener('pagehide',stop);
 window.addEventListener('beforeunload',event=>{if(recording.state!=='idle'||(recording.blob&&!recording.saved)){event.preventDefault();event.returnValue='';}});
-$('mode').addEventListener('change',()=>{if(!running&&!starting){if(session&&!confirm('モード変更で現在のログをリセットします。必要な結果は保存済みですか？')){$('mode').value=session.mode;return;}setPeopleOptions();$('maxPeople').value=$('mode').value==='single'?'1':'12';clearSession();}syncMode();});$('mirror').addEventListener('change',()=>{updateLineLegend();resetAwarenessDisplay('mirror');});$('showLine').addEventListener('change',updateLineLegend);$('axis').addEventListener('change',updateLineLegend);$('dwell').addEventListener('input',updateLineLegend);
+$('mode').addEventListener('change',()=>{if(!running&&!starting){if(session&&!confirm('モード変更で現在のログをリセットします。必要な結果は保存済みですか？')){$('mode').value=session.mode;return;}setPeopleOptions();$('maxPeople').value=['single','lamp'].includes($('mode').value)?'1':'12';clearSession();}syncMode();});$('mirror').addEventListener('change',()=>{updateLineLegend();resetAwarenessDisplay('mirror');});$('showLine').addEventListener('change',updateLineLegend);$('axis').addEventListener('change',updateLineLegend);$('dwell').addEventListener('input',updateLineLegend);
 function resetAwarenessDisplay(reason){
   if(running&&awarenessOn())message('観察中です。確認できた姿勢点の位置関係を表示します。終了するには「停止」を押してください。');
   awareness.reset();postureTracker.reset();observations=new Map();clearTimeout(awarenessStaleTimer);
@@ -214,4 +222,6 @@ document.addEventListener('fullscreenchange',()=>{const active=document.fullscre
 $('fullscreen').addEventListener('click',toggleFullscreen);$('screenCamera').addEventListener('click',()=>running||starting?stop():start());
 if(location.protocol==='file:')message('ファイルを直接開かず、公開先のHTTPS URLから開いてください。ローカル確認の起動方法はREADMEを参照してください。');
 function inputUI(){const file=$('inputMode').value==='video';$('videoInput').hidden=!file;$('cameraInput').hidden=file;$('fileProgressArea').hidden=!file;$('start').textContent=file?'動画解析を開始':'カメラを開始';$('refresh').hidden=file;$('recordDetail').textContent=file?'既存動画はフレーム単位で解析します。再録画は行わず、結果をJSON・CSVで保存します。':'録画はOFFです。';updateRecordingStatus();}
+function syncLampMode(){const on=$('mode').value==='lamp';document.body.classList.toggle('lamp-mode',on);document.querySelector('header>div>span').textContent=on?'MediaPipe Hand Landmarker / 端末内処理・本人操作で結果CSV':originalHeader;lampUI?.setActive(on);}
+lampUI=mountLampGame();
 $('inputMode').addEventListener('change',inputUI);inputUI();syncMode();updateRecordingStatus();refreshCameras();

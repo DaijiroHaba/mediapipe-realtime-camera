@@ -1,0 +1,42 @@
+.lamp-intro{font-weight:650;background:#e1eeea;padding:12px;margin-top:0}.lamp-controls{display:flex;gap:6px;flex-wrap:wrap}.lamp-board{position:relative;aspect-ratio:16/9;background:#183035;border:2px solid #527574;border-radius:8px;overflow:hidden;touch-action:none}.lamp-board video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:.35}.lamp-target{position:absolute;transform:translate(-50%,-50%);border:2px solid #93b4b9;border-radius:50%;display:grid;place-content:center;text-align:center;white-space:pre-line;font-size:12px;line-height:1.3;background:#263f45;color:#d4e5e8;pointer-events:none}.lamp-target.lit{background:#f6ce69;color:#182a31;border:4px double #fff7d8;font-weight:750}.lamp-cursor{position:absolute;transform:translate(-50%,-50%);border:3px solid #82f0d3;width:30px;height:30px;border-radius:50%;background:#123d3dc7;color:white;display:grid;place-content:center;pointer-events:none;z-index:2;font-weight:700}.lamp-cursor.second{border-radius:3px;border-color:#d0beff}.lamp-cursor.checking{border-style:dashed;opacity:.55}.lamp-metrics{background:#fff;padding:12px;font-variant-numeric:tabular-nums;line-height:1.8;margin-top:10px;border:1px solid #b5cbc5}#lampStatus{min-height:2.5em;line-height:1.7}body.lamp-mode .stage,body.lamp-mode #message,body.lamp-mode #bodyStatus,body.lamp-mode #stats,body.lamp-mode #feedback,body.lamp-mode #eventSection,body.lamp-mode #interestNote,body.lamp-mode #lineLegend,body.lamp-mode #awarenessNote,body.lamp-mode .display-mode,body.lamp-mode #record,body.lamp-mode #saveRecording,body.lamp-mode #screenCamera,body.lamp-mode .screen-indicators,body.lamp-mode aside>section:not(#lampSettings){display:none!important}[hidden]{display:none!important}body.lamp-mode .toolbar{flex-wrap:wrap}body.lamp-mode #speed{white-space:normal;width:auto;text-align:left}.lamp-mode #viewer:fullscreen{overflow:auto;display:block;padding:16px}.lamp-mode #viewer:fullscreen .lamp-board{max-height:68vh;aspect-ratio:16/9;width:100%}@media(max-width:500px){.lamp-target{font-size:10px}.lamp-cursor{width:24px;height:24px}.lamp-controls button{padding:8px;font-size:12px}.lamp-metrics{font-size:12px}body.lamp-mode .toolbar select{max-width:220px}}
+.lamp-layout{font-size:13px;line-height:1.6;margin:8px 0}.lamp-board.layout-invalid .lamp-target{opacity:.55;font-size:9px;overflow:hidden}.lamp-target{white-space:normal;font-size:12px;line-height:1.1;padding:0;overflow:hidden}.lamp-diagnostics{margin:12px 0;padding:12px;background:#e2efed;border-radius:6px}.lamp-diagnostics p{font-size:12px;line-height:1.7;margin:8px 0}.lamp-entry-link{font-size:12px;color:#245f67}.lamp-standalone #viewer:fullscreen{padding:16px;background:#eef4f2}.lamp-standalone #viewer:fullscreen .lamp-board{width:min(100%,calc(65vh * 16 / 9));margin:auto}.lamp-standalone #viewer:fullscreen .lamp-controls{justify-content:center}.lamp-board{contain:layout paint}.lamp-target{box-sizing:border-box}.lamp-cursor{will-change:left,top}
+.lamp-input-frame{position:absolute;border:2px dashed #d2eeef;pointer-events:none;z-index:1}.lamp-input-frame span{position:absolute;left:5px;top:3px;font-size:11px;background:#102c35b8;padding:2px 5px;color:#fff}.lamp-cue{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;z-index:3;text-align:center;color:#f4ffff;text-shadow:0 2px 8px #183035}.lamp-cue strong{font-size:clamp(70px,12vw,140px);font-variant-numeric:tabular-nums;line-height:1.05}.lamp-cue small{font-size:15px;background:#12323a99;padding:4px 8px;border-radius:5px}.lamp-cue[data-kind=final]{inset:4px 0 auto;opacity:.62;justify-content:flex-start}.lamp-cue[data-kind=final] strong{font-size:clamp(44px,6vw,65px)}.lamp-cue[data-kind=final] small{font-size:12px}.lamp-cue[data-kind=finish] strong{font-size:clamp(55px,10vw,105px)}#lampSeed{width:100%;box-sizing:border-box;padding:8px;margin-top:4px}
+/* 0.4.0: cursor origin is its tip dot. Edge orientation never moves the dot. */
+#lampPanel .lamp-cursor{width:0;height:0;transform:none;border:0;border-radius:0;background:none;opacity:1;color:#d5ff35;z-index:2}
+#lampPanel .lamp-cursor svg{position:absolute;left:-10px;top:-10px;width:42px;height:46px;overflow:visible;transform-origin:10px 10px}
+#lampPanel .lamp-cursor .pointer-hand{fill:currentColor;stroke:#0a2028;stroke-width:2;stroke-linejoin:round}
+#lampPanel .lamp-cursor .tip-dot{fill:currentColor;stroke:#0a2028;stroke-width:2}
+#lampPanel .lamp-cursor .tip-center{fill:#0a2028}
+#lampPanel .lamp-cursor.second{color:#ff77ef}
+#lampPanel .lamp-cursor.flip-x svg{transform:scaleX(-1)}
+#lampPanel .lamp-cursor.flip-y svg{transform:scaleY(-1)}
+#lampPanel .lamp-cursor.flip-x.flip-y svg{transform:scale(-1,-1)}
+#lampPanel .cursor-number{position:absolute;left:8px;top:23px;font-size:10px;line-height:12px;font-weight:800;color:#09232b;pointer-events:none}
+#lampPanel .flip-x .cursor-number{left:-16px}#lampPanel .flip-y .cursor-number{top:-33px}
+#lampPanel .cursor-hold{display:none;position:absolute;left:8px;top:37px;font-size:10px;line-height:12px;background:#fff;color:#17383f;padding:1px 2px;white-space:nowrap;border:1px solid #17383f}
+#lampPanel .lamp-cursor.checking .pointer-hand{fill:#fff;stroke-dasharray:3 2}
+#lampPanel .lamp-cursor.checking .tip-dot{fill:#fff;stroke-dasharray:2 1}
+#lampPanel .lamp-cursor.checking .cursor-hold{display:block}
+#lampPanel .flip-x .cursor-hold{left:-35px}#lampPanel .flip-y .cursor-hold{top:-47px}
+#lampPanel #lampVideo{inset:auto;left:0;top:0;transform-origin:0 0;object-fit:fill;max-width:none;max-height:none;pointer-events:none;opacity:.55}
+#lampPanel .lamp-input-status{font-size:12px;line-height:1.6;background:#edf4f2;color:#183a3c;padding:5px 8px;margin:6px 0;min-height:25px;border-left:3px solid #507570}
+#lampCueHold{display:inline-block;margin-left:10px;color:#183a3c;font-weight:700}
+#lampPanel .lamp-cue[data-kind=go]{background:none;opacity:.4;text-shadow:none}
+#lampPanel .lamp-cue[data-kind=go] strong{-webkit-text-stroke:1px #183035}
+#lampPanel .lamp-cue[data-kind=final]{inset:5px 0 auto;opacity:.3;text-shadow:none}
+#lampPanel .lamp-cue[data-kind=final] strong{font-size:clamp(28px,3.2vw,42px);-webkit-text-stroke:1px #102d35}
+#lampPanel .lamp-intro,#lampPanel .lamp-metrics,#lampPanel .lamp-diagnostics,#lampPanel .lamp-diagnostics .note{color:#183a3c}
+#lampPanel .lamp-controls button{color:#183a3c}#lampPanel .lamp-controls button.primary{color:#fff}
+body.lamp-mode #viewer:fullscreen{background:#eef4f2;color:#183a3c}
+body.lamp-mode #viewer:fullscreen .toolbar{color:#183a3c}
+body.lamp-mode #viewer:fullscreen #lampPanel .lamp-board{width:min(100%,calc(65vh * var(--lamp-aspect,1.7777778)));height:auto;max-height:none;aspect-ratio:var(--lamp-aspect,1.7777778);margin-inline:auto}
+
+/* v0.5 results are below the game board, never over targets/cursors. */
+#lampPanel .lamp-results{background:#f6faf8;color:#183a3c;border:1px solid #9ab8ae;border-radius:8px;padding:14px;margin:12px 0;line-height:1.7;font-variant-numeric:tabular-nums}
+#lampPanel .lamp-results h2{margin:0;font-size:20px;color:#183a3c}#lampPanel .lamp-results h2 small{font-size:13px;font-weight:500}
+#lampPanel .lamp-result-score{margin:6px 0}#lampPanel .lamp-result-score strong{font-size:36px;color:#126453}#lampPanel .lamp-result-score span{font-size:13px;margin-left:12px}
+#lampPanel .lamp-results p{margin:8px 0}#lampPanel .lamp-results .note{color:#365352;font-size:12px}
+#lampPanel .lamp-results button{color:#183a3c;background:#fff;border:1px solid #507570}#lampPanel .lamp-results summary{cursor:pointer;font-weight:600}
+#lampPanel .lamp-result-table{overflow:auto;max-height:360px}#lampPanel .lamp-result-table table{width:100%;border-collapse:collapse;background:#fff;color:#183a3c;font-size:12px}
+#lampPanel .lamp-result-table th,#lampPanel .lamp-result-table td{padding:6px;border:1px solid #aac6be;text-align:left;white-space:nowrap}#lampPanel .lamp-result-table thead{position:sticky;top:0;background:#deece6}
+#lampDownloadLinks{display:flex;gap:16px;flex-wrap:wrap}#lampDownloadLinks a{color:#125d70;text-decoration:underline}#lampPanel .lamp-csv-help{margin-top:10px}

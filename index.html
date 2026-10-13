@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>リアルタイム姿勢・通行観察 | MediaPipe</title>
   <link rel="stylesheet" href="style.css?v=1.2.1">
+  <link rel="stylesheet" href="lamp.css?v=0.5.1">
 </head>
 <body>
 <header><div><strong>リアルタイム姿勢・通行観察</strong><span>MediaPipe Pose Landmarker / 端末内処理・外部送信なし</span></div><div id="recordStatus" class="record-status" data-state="idle" role="status" aria-live="polite"><img id="recordStatusIcon" src="vendor/icons/video-off.svg" alt=""><strong id="recordStatusText">録画していません</strong></div></header>
 <main>
   <section class="workspace" aria-label="カメラと計測">
     <div id="viewer">
-    <div class="toolbar"><label>モード<select id="mode"><option value="single">姿勢ランドマーク</option><option value="traffic">人流・関心観察</option><option value="combined">姿勢 ＋ 人流・関心観察</option></select></label><label class="display-mode">表示<select id="displayMode"><option value="basic">基本表示</option><option value="awareness">姿勢の気づき</option></select></label><label id="awarenessViewSetting" class="display-mode" hidden>観察方向<select id="awarenessView"><option value="auto" selected>自動（正面／側面）</option><option value="front">正面のみ</option><option value="side">側面のみ（試作）</option></select></label><span id="state" role="status">停止中</span><span id="speed">0.0 fps</span><div class="record-tools"><button id="screenCamera" class="icon-command fullscreen-only" title="カメラを開始・停止" aria-label="全画面のカメラを開始・停止"><img src="vendor/icons/video.svg" alt=""></button><button id="record" class="icon-command" title="映像の録画を開始" aria-label="録画を開始" disabled><img id="recordButtonIcon" src="vendor/icons/video.svg" alt=""><span id="recordButtonText" class="sr-only">録画を開始</span></button><button id="saveRecording" class="icon-command" title="録画した映像を端末に保存" aria-label="動画を保存" disabled><img src="vendor/icons/download.svg" alt=""></button><button id="fullscreen" class="icon-command" title="全画面表示" aria-label="全画面表示" aria-pressed="false"><img id="fullscreenIcon" src="vendor/icons/maximize.svg" alt=""></button></div></div>
+    <div class="toolbar"><label>モード<select id="mode"><option value="single">姿勢ランドマーク</option><option value="traffic">人流・関心観察</option><option value="combined">姿勢 ＋ 人流・関心観察</option><option value="lamp">ランプ消灯ゲーム（端末内処理）</option></select></label><label class="display-mode">表示<select id="displayMode"><option value="basic">基本表示</option><option value="awareness">姿勢の気づき</option></select></label><label id="awarenessViewSetting" class="display-mode" hidden>観察方向<select id="awarenessView"><option value="auto" selected>自動（正面／側面）</option><option value="front">正面のみ</option><option value="side">側面のみ（試作）</option></select></label><a class="lamp-entry-link" href="lamps.html">ランプゲーム専用画面</a><span id="state" role="status">停止中</span><span id="speed">0.0 fps</span><div class="record-tools"><button id="screenCamera" class="icon-command fullscreen-only" title="カメラを開始・停止" aria-label="全画面のカメラを開始・停止"><img src="vendor/icons/video.svg" alt=""></button><button id="record" class="icon-command" title="映像の録画を開始" aria-label="録画を開始" disabled><img id="recordButtonIcon" src="vendor/icons/video.svg" alt=""><span id="recordButtonText" class="sr-only">録画を開始</span></button><button id="saveRecording" class="icon-command" title="録画した映像を端末に保存" aria-label="動画を保存" disabled><img src="vendor/icons/download.svg" alt=""></button><button id="fullscreen" class="icon-command" title="全画面表示" aria-label="全画面表示" aria-pressed="false"><img id="fullscreenIcon" src="vendor/icons/maximize.svg" alt=""></button></div></div>
     <div class="screen-indicators fullscreen-only"><strong id="screenRecordStatus" class="screen-record-status" data-recording="false" role="status">録画していません</strong><span id="screenMetrics" role="status">検出 0人</span></div>
     <p id="awarenessNote" class="awareness-note" hidden>姿勢の気づき｜いま映っている自然な姿勢の位置関係を表示します。姿勢を変える課題はありません。健康状態や姿勢の良し悪しは判定しません。</p>
     <div class="stage"><video id="video" playsinline muted aria-hidden="true"></video><canvas id="canvas" width="960" height="540" aria-label="カメラ映像と推定ランドマーク"></canvas><div id="empty">カメラ停止中</div></div>
@@ -34,6 +35,6 @@
   </aside>
 </main>
 <footer>研究用の試作版です。検出数・通過回数は実人数を保証しません。廊下での利用には施設の承認・掲示・同意等が必要です。映像や座標を外部サーバーへ送信する機能はありません。</footer>
-<script type="module" src="app.js?v=1.3.0-awareness-0.3.1"></script>
+<script type="module" src="app.js?v=1.3.0-awareness-0.3.1-lamp-0.5.1-lamp-0.3.0"></script>
 </body>
 </html>

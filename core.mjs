@@ -1,6 +1,6 @@
 export const VERSION = '1.3.0';
 export function modeFeatures(mode) {
-  return {pose:mode!=='traffic',traffic:mode==='traffic'||mode==='combined'};
+  return {pose:mode!=='traffic'&&mode!=='lamp',traffic:mode==='traffic'||mode==='combined'};
 }
 export function interestRegion(value) {
   return value==='center'?{x:.25,y:0,w:.5,h:1}:{x:0,y:0,w:1,h:1};
