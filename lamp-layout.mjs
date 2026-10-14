@@ -14,6 +14,9 @@ export function geometry(points,w,h,radius){
 }
 /** Four corner zones + seeded rejection sampling. Not uniform randomization for research allocation. */
 export function createLayout(config,w=960,h=540,seed=0){
+ // Reserve screen space below targets for the rest of a detected hand. No cursor remapping.
+ const reserve=Number.isFinite(config.bottomReserve)?Math.max(0,Math.min(.35,config.bottomReserve)):0;
+ if(reserve>0){const plan=createLayout({...config,bottomReserve:0},w,h*(1-reserve),seed);return {...plan,points:plan.points.map(p=>({...p,y:p.y*(1-reserve)})),bottomReserve:reserve,reason:plan.reason?plan.reason+'。下のランプ余白も調整できます':''};}
  const count=config.lampCount??30,[cols,rows]=grids[count]||grids[30];
  const desired=Math.min(36,Math.max(MIN_RADIUS,Math.min(w,h)*.06)),pad=desired+20;
  const limit=Math.min((w-2*pad)/(cols-1),(h-2*pad)/(rows-1))/2-GAP/2;

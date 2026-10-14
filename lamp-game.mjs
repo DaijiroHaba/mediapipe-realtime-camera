@@ -1,17 +1,17 @@
 // @ts-check
-import {createLayout,geometry} from './lamp-layout.mjs';
-import {LampRecord,aggregate} from './lamp-record.mjs';
-export {targetPositions,targetLayout} from './lamp-layout.mjs';
+import {createLayout,geometry} from './lamp-layout.mjs?v=0.5.5';
+import {LampRecord,aggregate} from './lamp-record.mjs?v=0.5.5';
+export {targetPositions,targetLayout} from './lamp-layout.mjs?v=0.5.5';
 /** @typedef {{id:string,x:number,y:number,eligible:boolean,visible?:boolean}} Cursor */
-export const GAME_VERSION='0.5.3';
-export const DEFAULT_GAME={duration:30,interval:2,lifetime:6,maxActive:2,pattern:'sequential',lampCount:30,placement:'grid',seed:-1,mapMode:'image',mirror:true,smoothing:false,width:.48,height:.46,cx:.5,cy:.56,posture:'seated'};
+export const GAME_VERSION='0.5.5';
+export const DEFAULT_GAME={duration:30,interval:2,lifetime:6,maxActive:2,pattern:'sequential',lampCount:30,placement:'grid',seed:-1,mapMode:'image',mirror:true,smoothing:false,width:.48,height:.46,cx:.5,cy:.56,posture:'seated',movementMode:'fixed',bottomReserve:.16};
 /** @typedef {typeof DEFAULT_GAME} GameSettings */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 /** @param {Partial<GameSettings>} [input] */
 export function settings(input={}){
  const p={...DEFAULT_GAME,...input};
- for(const k of ['duration','interval','lifetime','maxActive','lampCount','seed','width','height','cx','cy'])if(!Number.isFinite(p[k]))throw Error(`設定 ${k} が不正です`);
- return {...p,lampCount:[6,12,30,50].includes(p.lampCount)?p.lampCount:30,placement:p.placement==='random'?'random':'grid',seed:p.seed<0?-1:Math.floor(clamp(p.seed,0,4294967295)),mirror:p.mirror===true,smoothing:p.smoothing===true,mapMode:p.mapMode==='comfortable'?'comfortable':'image',duration:clamp(p.duration,10,60),interval:clamp(p.interval,.25,5),lifetime:clamp(p.lifetime,1,15),maxActive:Math.round(clamp(p.maxActive,1,4)),width:clamp(p.width,.18,.8),height:clamp(p.height,.15,.8),cx:clamp(p.cx,.2,.8),cy:clamp(p.cy,.25,.75),pattern:p.pattern==='timed'?'timed':'sequential',posture:p.posture==='standing'?'standing':'seated'};
+ for(const k of ['duration','interval','lifetime','maxActive','lampCount','seed','width','height','cx','cy','bottomReserve'])if(!Number.isFinite(p[k]))throw Error(`設定 ${k} が不正です`);
+ return {...p,bottomReserve:clamp(p.bottomReserve,0,.35),lampCount:[6,12,30,50].includes(p.lampCount)?p.lampCount:30,placement:p.placement==='random'?'random':'grid',seed:p.seed<0?-1:Math.floor(clamp(p.seed,0,4294967295)),mirror:p.mirror===true,smoothing:p.smoothing===true,mapMode:p.mapMode==='comfortable'?'comfortable':'image',duration:clamp(p.duration,10,60),interval:clamp(p.interval,.25,5),lifetime:clamp(p.lifetime,1,15),maxActive:Math.round(clamp(p.maxActive,1,4)),width:clamp(p.width,.18,.8),height:clamp(p.height,.15,.8),cx:clamp(p.cx,.2,.8),cy:clamp(p.cy,.25,.75),pattern:p.pattern==='timed'?'timed':'sequential',posture:p.posture==='standing'?'standing':'seated',movementMode:p.posture==='standing'&&p.movementMode==='stepping'?'stepping':'fixed'};
 }
 export function median(values){if(!values.length)return null;const v=[...values].sort((a,b)=>a-b),m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;}
 export class LampGame{
@@ -26,7 +26,7 @@ export class LampGame{
   this.targets=this.plan.points.map(p=>({...p,active:false,contact:false,armed:false,litAt:0,expiresAt:0,outcome:'待機',activation:null}));
   this.goUntil=-Infinity;this.state='ready';this.resumePhase='playing';this.practice=false;this.elapsed=0;this.preElapsed=0;this.lastWall=null;this.inputWall=-Infinity;this.tracking=false;this.cursors=[];this.responses=[];this.issued=0;this.hits=0;this.expired=0;this.nextSpawn=0;this.lastTarget=-1;
  }
- newRecord(now,w,h){this.record=new LampRecord({version:GAME_VERSION,practice:this.practice,now,conditions:{...this.config,...this.context,layout_seed:this.seedUsed,positions:this.plan.points,board_width_px:w,board_height_px:h,hit_radius_px:this.radius(w,h),coordinate_version:'shared-video-transform/0.4',input_definition:'landmark8 displayed entry; tracking identifiers are not body sides',interval_definition:this.config.pattern==='sequential'?'one active; after hit 0.3 s; configured interval applies only to timed mode':'scheduled interval; no backlog'}});this.record.screen(now,w,h,this.radius(w,h));}
+ newRecord(now,w,h){this.record=new LampRecord({version:GAME_VERSION,practice:this.practice,now,conditions:{...this.config,...this.context,layout_seed:this.seedUsed,positions:this.plan.points,board_width_px:w,board_height_px:h,hit_radius_px:this.radius(w,h),coordinate_version:'shared-video-transform/0.5.4-contain-cover',input_definition:'landmark8 displayed entry; tracking identifiers are not body sides',interval_definition:this.config.pattern==='sequential'?'one active; after hit 0.3 s; configured interval applies only to timed mode':'scheduled interval; no backlog'}});this.record.screen(now,w,h,this.radius(w,h),this.context.display_fit??'contain');}
  start(now,practice=false,w=960,h=540){if(this.record&&!this.record.closed)this.finish(now);this.reset(this.config,w,h);if(!this.layout(w,h).valid)return false;this.state='playing';this.practice=practice;this.lastWall=now;this.newRecord(now,w,h);this.record.go(now);return true;}
  beginCountdown(now,w=960,h=540){if(this.record&&!this.record.closed)this.finish(now);this.reset(this.config,w,h);if(!this.layout(w,h).valid)return false;this.state='countdown';this.lastWall=now;this.newRecord(now,w,h);return true;}
  pause(now,reason='manual_pause'){this.advance(now,this.tracking);if(['playing','countdown'].includes(this.state)){this.resumePhase=this.state;this.state='paused';this.pauseReason=reason;this.record?.closeQuality(now);}this.tracking=false;this.cursors=[];}

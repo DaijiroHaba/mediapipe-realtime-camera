@@ -1,10 +1,11 @@
 // @ts-check
-import {LampGame,GAME_VERSION} from './lamp-game.mjs?v=0.5.3';
-import {FingerTracker,fingerObservations,selectOneCursor} from './lamp-tracker.mjs';
-import {LampPerformance} from './lamp-performance.mjs?v=0.5.3';
+import {LampGame,GAME_VERSION} from './lamp-game.mjs?v=0.5.5';
+import {FingerTracker,fingerObservations,selectOneCursor} from './lamp-tracker.mjs?v=0.5.5';
+import {LampPerformance} from './lamp-performance.mjs?v=0.5.5';
 import {CameraLease} from './camera-lease.mjs';
-import {mapCursor,mouseCursor,viewTransform} from './lamp-input.mjs';
-import {mountResults} from './lamp-result-ui.mjs';
+import {mapCursor,mouseCursor,viewTransform} from './lamp-input.mjs?v=0.5.5';
+import {mountResults} from './lamp-result-ui.mjs?v=0.5.5';
+import {mountLampScreen} from './lamp-screen.mjs?v=0.5.5';
 const $=id=>/** @type {any} */(document.getElementById(id));
 const showText=(n,v)=>{if(n.textContent!==v)n.textContent=v;};
 const MAX_RESULT_AGE_MS=200; // engineering freshness limit; not a clinical threshold
@@ -13,10 +14,10 @@ export function mountLampGame({standalone=false}={}){
  const panel=document.createElement('section');panel.id='lampPanel';panel.hidden=true;
  panel.innerHTML=`<p class="lamp-intro">両人差し指ランプ消灯デモ ${GAME_VERSION}｜まず座位で、無理なく届く配置を確認してください</p>
  <div class="lamp-controls"><button id="lampPrepare">準備</button><button id="lampPractice">練習</button><button id="lampStart" class="primary">30秒を開始</button><button id="lampPause">一時停止</button><button id="lampResume">再開</button><button id="lampEnd">終了</button><button id="lampStop">停止・カメラ終了</button><button id="lampReset">リセット</button></div>
- <label id="lampStandingLabel" class="check" hidden><input id="lampStandingReady" type="checkbox">立位：足を動かさず届く配置・姿勢・周囲・必要時の見守りを確認</label>
+ <label id="lampStandingLabel" class="check" hidden><input id="lampStandingReady" type="checkbox"><span id="lampStandingText">立位：足を動かさず届く配置・姿勢・周囲・必要時の見守りを確認</span></label>
  <p id="lampReadyStatus" class="lamp-ready-status" role="status"></p><div id="lampLayoutActions" class="lamp-controls" hidden><button id="lampTryGrid">同じ個数で整列に変更</button><button id="lampTryFewer">12個に変更</button></div>
  <p id="lampStatus" role="status">マウスでも操作できます。まず準備を押してください。</p>
- <div id="lampBoard" class="lamp-board" tabindex="0" aria-label="人差し指カーソルの中心が点灯円へ外から入ると消灯します"><video id="lampVideo" playsinline muted aria-hidden="true"></video><div id="lampTargets"></div><div id="lampCursor1" class="lamp-cursor" hidden></div><div id="lampCursor2" class="lamp-cursor second" hidden></div><div id="lampCue" class="lamp-cue" role="status" aria-live="polite" hidden><strong id="lampCueText"></strong></div></div>
+ <div id="lampBoard" class="lamp-board" tabindex="0" aria-label="人差し指カーソルの中心が点灯円へ外から入ると消灯します"><video id="lampVideo" playsinline muted aria-hidden="true"></video><div id="lampBottomBand" aria-hidden="true"><span>手が映るための下の余白</span></div><div id="lampTargets"></div><div id="lampCursor1" class="lamp-cursor" hidden></div><div id="lampCursor2" class="lamp-cursor second" hidden></div><div id="lampCue" class="lamp-cue" role="status" aria-live="polite" hidden><strong id="lampCueText"></strong></div></div>
  <p id="lampInputStatus" class="lamp-input-status" role="status"><span id="lampInputHint"></span><small id="lampCueHold"></small></p><p id="lampLayout" class="lamp-layout" role="status"></p><div class="lamp-metrics" id="lampMetrics"></div>
  <section id="lampResults" class="lamp-results" hidden></section>
  <details class="lamp-diagnostics" open><summary>処理の速さ（端末内で計測）</summary><p id="lampPerformance"></p><p class="note">撮影・モニター表示を含む全遅延ではありません。解析fpsと指先の揺れを併せて確認してください。</p></details>
@@ -28,14 +29,15 @@ export function mountLampGame({standalone=false}={}){
  <label>カメラ<select id="lampCamera"><option value="">既定のカメラ</option></select></label><button id="lampRefresh">カメラ一覧を更新</button>
  <label>使用する手<select id="lampHands"><option value="both">両手</option><option value="one">片手（カーソル1個）</option></select></label>
  <label>配置するランプ<select id="lampCount"><option value="30">30個（6列×5行）</option><option value="50">50個（10列×5行）</option><option value="12">12個（4列×3行）</option><option value="6">6個（3列×2行）</option></select></label>
- <label>配置方式<select id="lampPlacement"><option value="grid">整列</option><option value="random">ランダム（開始時に固定）</option></select></label><label>配置seed（空欄＝毎回生成）<input id="lampSeed" type="number" min="0" max="4294967295" step="1" placeholder="検証時だけ数値を指定"></label><label>姿勢<select id="lampPosture"><option value="seated">座位（初期設定）</option><option value="standing">立位</option></select></label>
+ <label>下側のランプ余白 <output id="lampBottomValue">16%</output><input id="lampBottomReserve" type="range" min="0" max="35" step="1" value="16"></label><p class="note">下端のランプに指先を合わせたとき、手首が撮影範囲から出ないための余白です。16%は実装上の仮設定です。カメラ位置と手の大きさに合わせて準備中に調整してください。指先カーソルや映像の位置は変えません。</p>
+ <label>配置方式<select id="lampPlacement"><option value="grid">整列</option><option value="random">ランダム（開始時に固定）</option></select></label><label>配置seed（空欄＝毎回生成）<input id="lampSeed" type="number" min="0" max="4294967295" step="1" placeholder="検証時だけ数値を指定"></label><label>姿勢<select id="lampPosture"><option value="seated">座位（初期設定）</option><option value="standing">立位・足位置固定</option><option value="stepping">立位・移動あり（全身で操作）</option></select></label>
  <p id="lampSafety" class="note">安定した椅子で、無理なく届く範囲を準備で調整してください。痛みや疲れがあれば中止してください。</p>
  
  <label>点灯方式<select id="lampPattern"><option value="sequential">基本：1つずつ</option><option value="timed">定期：上限1〜4個</option></select></label>
  <label>レベル（新点灯の間隔）<select id="lampLevel"><option value="3">ゆっくり：3秒</option><option value="2" selected>標準：2秒</option><option value="1.25">速め：1.25秒</option><option value=".5">0.5秒</option><option value=".25">0.25秒</option></select></label>
  <label>点灯の失効時間<select id="lampLifetime"><option value="1">1秒</option><option value="2">2秒</option><option value="4">4秒</option><option value="6" selected>6秒</option><option value="10">10秒</option></select></label>
  <label>同時点灯数の上限<select id="lampMax"><option value="1">1個</option><option value="2" selected>2個</option><option value="3">3個</option><option value="4">4個</option></select></label>
- <label>映像と操作点<select id="lampMapMode"><option value="image">通常：映像全体と指先を一致</option><option value="comfortable">座位補助：映像と指先を一緒に拡大</option></select></label><label>指先の平滑化<select id="lampSmoothing"><option value="off">なし（既定・直接追従）</option><option value="light">軽い平滑化（揺れ軽減・追従遅れあり）</option></select></label><p class="note">座位補助は映像の一部も同じように拡大します。少ない動きで届く場合がありますが、カメラ位置に依存し、切り抜き外の指は画面に表示されません。カメラには映る位置で、拡大範囲を調整してください。</p><div id="lampCropSettings" hidden><label>座位補助の拡大範囲・横幅<input id="lampWidth" type="range" min="18" max="80" value="48"></label><label>座位補助の拡大範囲・縦幅<input id="lampHeight" type="range" min="15" max="80" value="46"></label>
+ <label>映像と操作点<select id="lampMapMode"><option value="image">通常：映像全体と指先を一致</option><option value="comfortable">座位補助：映像と指先を一緒に拡大</option></select></label><label>指先の平滑化<select id="lampSmoothing"><option value="off">なし（既定・直接追従）</option><option value="light">軽い平滑化（揺れ軽減・追従遅れあり）</option></select></label><p class="note">全画面では映像と指先を同じ比率で拡大し、画面に合わない部分を切り抜きます。切り抜き外の手では採点しません。座位補助は映像の一部も同じように拡大します。少ない動きで届く場合がありますが、カメラ位置に依存し、切り抜き外の指は画面に表示されません。カメラには映る位置で、拡大範囲を調整してください。</p><div id="lampCropSettings" hidden><label>座位補助の拡大範囲・横幅<input id="lampWidth" type="range" min="18" max="80" value="48"></label><label>座位補助の拡大範囲・縦幅<input id="lampHeight" type="range" min="15" max="80" value="46"></label>
  <label>拡大範囲の左右<input id="lampCx" type="range" min="25" max="75" value="50"></label><label>拡大範囲の上下<input id="lampCy" type="range" min="30" max="70" value="56"></label>
  </div><label class="check"><input id="lampMirror" type="checkbox" checked>手と映像を左右反転</label><label class="check"><input id="lampPreview" type="checkbox" checked>カメラのライブ映像を重ねる</label>
  <details><summary>速さの比較設定</summary><label>解析の目標頻度<select id="lampFps"><option value="30">30 fps（目標）</option><option value="15">15 fps（比較用）</option></select></label>
@@ -52,11 +54,13 @@ export function mountLampGame({standalone=false}={}){
  let sourceTracks=[],observationReasons=[],videoTransformKey='';
  let connecting=false,cameraReady=false,cameraText='停止中',trackingText='マウス待機',lastSlow=-Infinity,layoutKey='',targetNodes=[],slots=[null,null],wasLocked=false;
  const nowMs=()=>performance.now(),time=()=>nowMs()/1000,size=()=>{const r=board.getBoundingClientRect();return {w:r.width-2*board.clientLeft||960,h:r.height-2*board.clientTop||540};};
- const config=()=>({mirror:$('lampMirror').checked,smoothing:$('lampSmoothing').value==='light',placement:$('lampPlacement').value,seed:$('lampSeed').value===''?-1:Number($('lampSeed').value),mapMode:$('lampMapMode').value,posture:$('lampPosture').value,pattern:$('lampPattern').value,lampCount:Number($('lampCount').value),interval:Number($('lampLevel').value),lifetime:Number($('lampLifetime').value),maxActive:Number($('lampMax').value),width:Number($('lampWidth').value)/100,height:Number($('lampHeight').value)/100,cx:Number($('lampCx').value)/100,cy:Number($('lampCy').value)/100});
+ const config=()=>({mirror:$('lampMirror').checked,smoothing:$('lampSmoothing').value==='light',placement:$('lampPlacement').value,seed:$('lampSeed').value===''?-1:Number($('lampSeed').value),mapMode:$('lampMapMode').value,posture:$('lampPosture').value==='seated'?'seated':'standing',movementMode:$('lampPosture').value==='stepping'?'stepping':'fixed',bottomReserve:Number($('lampBottomReserve').value)/100,pattern:$('lampPattern').value,lampCount:Number($('lampCount').value),interval:Number($('lampLevel').value),lifetime:Number($('lampLifetime').value),maxActive:Number($('lampMax').value),width:Number($('lampWidth').value)/100,height:Number($('lampHeight').value)/100,cx:Number($('lampCx').value)/100,cy:Number($('lampCy').value)/100});
+ const isScreen=()=>active&&document.fullscreenElement===viewer;
+ const viewConfig=()=>({...game.config,displayFit:isScreen()?'cover':'contain'});
  const resetGame=()=>{const {w,h}=size();if(game.record&&!game.record.closed)game.finish(time(),'reset_canceled');game.reset(config(),w,h);layoutKey='';};
  const setStatus=s=>showText($('lampStatus'),s);
  const lease=new CameraLease(()=>{game.pause(time(),'camera_lease');releaseCamera();setStatus('別の画面でカメラを開始したため停止しました。');render(true);});
- const lockedIds=['lampInput','lampSmoothing','lampCount','lampPlacement','lampSeed','lampMapMode','lampPosture','lampPattern','lampLevel','lampLifetime','lampMax','lampWidth','lampHeight','lampCx','lampCy','lampHands','lampMirror','lampCamera','lampStandingReady','lampFps','lampResolution','lampDelegate','lampRefresh'];
+ const lockedIds=['lampInput','lampSmoothing','lampCount','lampPlacement','lampSeed','lampBottomReserve','lampMapMode','lampPosture','lampPattern','lampLevel','lampLifetime','lampMax','lampWidth','lampHeight','lampCx','lampCy','lampHands','lampMirror','lampCamera','lampStandingReady','lampFps','lampResolution','lampDelegate','lampRefresh'];
  function releaseCamera(){
   game.record?.closeQuality(time());generation++;connecting=false;cameraReady=false;pendingCancel?.();pendingCancel=null;clearTimeout(watchdog);watchdog=null;
   if(videoCallback!==null&&video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(videoCallback);videoCallback=null;
@@ -152,20 +156,20 @@ export function mountLampGame({standalone=false}={}){
   board.style.aspectRatio=String(aspect);board.style.setProperty('--lamp-aspect',String(aspect));videoTransformKey='';
  }
  function updateMappedCursors(){
-  const {w,h}=size();cursors=sourceTracks.map(t=>mapCursor(t,game.config,w,h,video.videoWidth||960,video.videoHeight||540));
+  const {w,h}=size();cursors=sourceTracks.map(t=>mapCursor(t,viewConfig(),w,h,video.videoWidth||960,video.videoHeight||540));
   const usable=cursors.filter(t=>t.eligible).length,hidden=cursors.filter(t=>!t.visible);
-  const reasons=[...observationReasons,...cursors.filter(t=>t.visible&&!t.eligible).map(t=>t.reason),...hidden.map(t=>'表示外 '+t.direction+'：座位補助の拡大範囲を調整')].filter(Boolean);
+  const reasons=[...observationReasons,...cursors.filter(t=>t.visible&&!t.eligible).map(t=>t.reason),...hidden.map(t=>'表示外 '+t.direction+(isScreen()?'：全画面の切り抜き内へ手を映してください':'：座位補助の拡大範囲を調整'))].filter(Boolean);
   trackingText=`人差し指 ${sourceTracks.length}個／採点可能 ${usable}個${reasons.length?'｜'+[...new Set(reasons)].join('／'):''}`;
  }
  function layout(){const {w,h}=size();return game.layout(w,h);}
  async function begin(practice){
   if(connecting)return;
-  if($('lampPosture').value==='standing'&&!$('lampStandingReady').checked){setStatus('立位の配置と周囲を確認してください。');return;}
+  if($('lampPosture').value!=='seated'&&!$('lampStandingReady').checked){setStatus('立位の配置と周囲を確認してください。');return;}
   if(!prepared&&!await prepare())return;
   if(!layout().valid){setStatus('配置間隔が不足しています。画面を広げるか、ランプを12個／6個に減らしてください。無理に到達範囲を広げないでください。');render(true);return;}
   if($('lampInput').value==='hand'&&!cameraReady){if(!await camera())return;}
   if(!active)return;
-  game.context={input:$('lampInput').value,hands:$('lampHands').value,frame_pipeline:'latest-only/result-driven/0.5.2',camera_requested:$('lampInput').value==='hand'?$('lampResolution').value:null,camera_actual:$('lampInput').value==='hand'?{...perf.settings}:null,camera_selection:$('lampInput').value==='hand'?($('lampCamera').value?'selected':'default'):'not_used',analysis_target_fps:$('lampInput').value==='hand'?Number($('lampFps').value):null,delegate:$('lampInput').value==='hand'?perf.delegate:'not_used',delegate_requested:$('lampDelegate').value,preview:$('lampPreview').checked,video_width_px:$('lampInput').value==='hand'?video.videoWidth:null,video_height_px:$('lampInput').value==='hand'?video.videoHeight:null};
+  game.context={fullscreen:isScreen(),display_fit:viewConfig().displayFit,input:$('lampInput').value,hands:$('lampHands').value,frame_pipeline:'latest-only/result-driven/0.5.2',camera_requested:$('lampInput').value==='hand'?$('lampResolution').value:null,camera_actual:$('lampInput').value==='hand'?{...perf.settings}:null,camera_selection:$('lampInput').value==='hand'?($('lampCamera').value?'selected':'default'):'not_used',analysis_target_fps:$('lampInput').value==='hand'?Number($('lampFps').value):null,delegate:$('lampInput').value==='hand'?perf.delegate:'not_used',delegate_requested:$('lampDelegate').value,preview:$('lampPreview').checked,video_width_px:$('lampInput').value==='hand'?video.videoWidth:null,video_height_px:$('lampInput').value==='hand'?video.videoHeight:null};
   const {w,h}=size();const started=practice?game.start(time(),true,w,h):game.beginCountdown(time(),w,h);
   if(!started){setStatus(game.layout(w,h).reason);render(true);return;}
   setStatus(practice?'練習中。無理なく届く範囲で試してください。':'3 → 2 → 1 → Goで開始します。手／マウスの入力がない間はカウントダウンも止まります。');render(true);
@@ -183,8 +187,9 @@ export function mountLampGame({standalone=false}={}){
    targetNodes=game.targets.map(t=>{const n=document.createElement('div');n.className='lamp-target';n.dataset.id=String(t.id);return n;});
    $('lampTargets').replaceChildren(...targetNodes);layoutKey='';$('lampBoard').setAttribute('aria-label',`${count}個のランプ。人差し指カーソル中心が点灯円へ外から入ると消灯します`);
   }
-  const key=[w,h,game.config.width,game.config.height,game.config.cx,game.config.cy,count,game.revision].join('/');
-  if(key!==layoutKey){layoutKey=key;game.record?.screen(stamp/1000,w,h,geometry.radius);
+  const key=[w,h,game.config.bottomReserve,viewConfig().displayFit,game.config.width,game.config.height,game.config.cx,game.config.cy,count,game.revision].join('/');
+  if(key!==layoutKey){layoutKey=key;
+   $('lampBottomBand').hidden=game.config.bottomReserve===0;$('lampBottomBand').style.height=`${game.config.bottomReserve*100}%`;showText($('lampBottomValue'),`${Math.round(game.config.bottomReserve*100)}%`);game.record?.screen(stamp/1000,w,h,geometry.radius,viewConfig().displayFit);
    game.targets.forEach((t,i)=>{const n=targetNodes[i];n.style.left=`${t.x*100}%`;n.style.top=`${t.y*100}%`;n.style.width=n.style.height=`${geometry.radius*2}px`;});
    board.classList.toggle('layout-invalid',!geometry.valid);
    showText($('lampLayout'),geometry.valid?`${count}個配置・${game.config.placement==='random'?'ランダム':'整列'}・seed ${game.seedUsed}｜★点灯・✓消灯・番号だけは待機｜円の範囲が当たり判定`:geometry.reason+'。開始できません。全画面表示・個数を減らす・ランダムならseed変更を試してください。');
@@ -197,7 +202,7 @@ export function mountLampGame({standalone=false}={}){
   const cue=game.cue(stamp/1000),cueNode=$('lampCue'),cueKey=cue.kind+'/'+cue.text;
   if(cueNode.dataset.cue!==cueKey){lastSlow=-Infinity;cueNode.dataset.cue=cueKey;cueNode.dataset.transitions=String(Number(cueNode.dataset.transitions||0)+1);cueNode.dataset.kind=cue.kind;showText($('lampCueText'),cue.text);}
   cueNode.hidden=!cue.text;showText($('lampCueHold'),['countdown','playing','paused'].includes(game.state)?(game.state==='paused'?'一時停止・時計停止':!game.tracking?'入力待ち・時計停止':''):'');
-  const view=viewTransform(game.config,w,h,video.videoWidth||960,video.videoHeight||540),videoKey=[view.matrix,view.sourceWidth,view.sourceHeight].join('/');
+  const view=viewTransform(viewConfig(),w,h,video.videoWidth||960,video.videoHeight||540),videoKey=[view.matrix,view.sourceWidth,view.sourceHeight].join('/');
   if(videoKey!==videoTransformKey){videoTransformKey=videoKey;video.style.width=`${view.sourceWidth}px`;video.style.height=`${view.sourceHeight}px`;video.style.transform=view.matrix;board.dataset.view=JSON.stringify({a:view.a,d:view.d,e:view.e,f:view.f,w,h,sourceWidth:view.sourceWidth,sourceHeight:view.sourceHeight});}
   $('lampCropSettings').hidden=$('lampMapMode').value!=='comfortable';
   if(!force&&stamp-lastSlow<200)return;lastSlow=stamp;
@@ -206,12 +211,13 @@ export function mountLampGame({standalone=false}={}){
   const s=game.summary(),remaining=Math.max(0,game.config.duration-game.elapsed),phase={ready:'準備',countdown:'開始前',playing:game.practice?'練習':'実施中',paused:'一時停止',ended:'終了'}[game.state];
   showText($('lampMetrics'),`${phase}${['playing','countdown'].includes(game.state)&&!game.tracking?'（入力待ち・時計停止）':''}｜${game.practice?'練習':`残り ${remaining.toFixed(1)}秒`}｜得点 ${s.score}点｜出題 ${s.issued}｜消灯 ${s.extinguished}｜失効 ${s.expired}｜残灯 ${s.remaining}｜観測応答時間中央値 ${s.response_median_ms===null?'—':`${Math.round(s.response_median_ms)} ms`}（${s.response_samples}件）`);
   results.update(game.lastResult,game.state==='ended'||game.state==='ready');
+  screen.update({state:game.state,score:s.score,remaining,practice:game.practice,tracking:game.tracking,hasResult:!!game.lastResult,inputHint:trackingText});
   const p=perf.snapshot(stamp),gameInfo=`画面更新 ${p.gameFps.toFixed(1)} fps｜ゲーム更新＋DOM書込 p95 ${p.gameP95===null?'—':p.gameP95.toFixed(2)+' ms'}`,fmt=v=>v===null?'—':`${v.toFixed(1)} ms`;
   showText($('lampPerformance'),$('lampInput').value==='mouse'?`マウス入力・手AI停止｜${gameInfo}`:`${p.delegate}｜カメラ設定 ${p.settings.width??'—'}×${p.settings.height??'—'} / ${p.settings.frameRate??'—'} fps｜映像更新 ${p.cameraObservedFps.toFixed(1)} fps｜解析結果 ${p.inferenceFps.toFixed(1)} fps（目標${$('lampFps').value}）｜推論 中央値 ${fmt(p.inferenceP50)}・p95 ${fmt(p.inferenceP95)}｜取得開始→結果受領 p95 ${fmt(p.softwareP95)}｜結果後→次取得 p95 ${fmt(p.captureIdleP95)}｜結果受領→カーソル書込 p95 ${fmt(p.cursorWriteP95)}｜画像取得 p95 ${fmt(p.bitmapP95)}｜古い結果の保留 ${p.rejected}件｜${gameInfo}`);
   const locked=['countdown','playing','paused'].includes(game.state)||connecting;
   if(force||locked!==wasLocked){for(const id of lockedIds)$(id).disabled=locked;wasLocked=locked;}
   for(const id of ['lampPrepare','lampPractice','lampStart'])$(id).disabled=locked;
-  const safe=$('lampPosture').value!=='standing'||$('lampStandingReady').checked;
+  const safe=$('lampPosture').value==='seated'||$('lampStandingReady').checked;
   const reasons=[];
   if(connecting)reasons.push('カメラ・手モデルを準備中です');
   if(!safe)reasons.push('立位では、上の確認チェックを選ぶと開始できます。配置変更後は再確認してください。安全に届く配置と周囲を確認してください');
@@ -245,10 +251,11 @@ export function mountLampGame({standalone=false}={}){
  $('lampPause').onclick=()=>{game.pause(time());render(true);};$('lampEnd').onclick=()=>{game.finish(time());render(true);};
  $('lampResume').onclick=async()=>{if(connecting||!layout().valid)return;if($('lampInput').value==='hand'&&!await camera())return;tracker.reset();sourceTracks=[];cursors=[];slots=[null,null];game.resume(time());setStatus('再開しました。点灯円の外から入れてください。');render(true);};
  $('lampStop').onclick=()=>{const {w,h}=size();game.stop(time(),w,h);releaseCamera();setStatus(game.state==='ready'?'開始前のカウントダウンを中止しました。':'停止しました。再開で続けられます。');render(true);};$('lampReset').onclick=reset;$('lampInput').onchange=reset;
- for(const id of ['lampCount','lampPlacement','lampSeed','lampSmoothing','lampMapMode','lampPosture','lampPattern','lampLevel','lampLifetime','lampMax','lampWidth','lampHeight','lampCx','lampCy'])$(id).addEventListener('input',()=>{
-  if(id==='lampPosture'&&$('lampPosture').value==='standing'){$('lampWidth').value=String(Math.min(28,Number($('lampWidth').value)));$('lampHeight').value=String(Math.min(20,Number($('lampHeight').value)));}
-  $('lampStandingLabel').hidden=$('lampPosture').value!=='standing';$('lampStandingReady').checked=false;prepared=false;updateVideoGeometry();resetGame();mouse=null;tracker.reset();sourceTracks=[];cursors=[];slots=[null,null];
-  showText($('lampSafety'),$('lampPosture').value==='standing'?'立位：足を動かさず届く範囲で、姿勢・周囲・必要時の見守りを確認してください。カメラは安全性を保証しません。':'座位：安定した椅子で無理なく届く配置を確認。痛みや疲れがあれば中止してください。');render(true);
+ for(const id of ['lampCount','lampPlacement','lampSeed','lampBottomReserve','lampSmoothing','lampMapMode','lampPosture','lampPattern','lampLevel','lampLifetime','lampMax','lampWidth','lampHeight','lampCx','lampCy'])$(id).addEventListener('input',()=>{
+  if(id==='lampPosture'&&$('lampPosture').value!=='seated'){$('lampWidth').value=String(Math.min(28,Number($('lampWidth').value)));$('lampHeight').value=String(Math.min(20,Number($('lampHeight').value)));}
+  $('lampStandingLabel').hidden=$('lampPosture').value==='seated';
+  showText($('lampStandingText'),$('lampPosture').value==='stepping'?'立位・移動あり：移動範囲・足元・周囲の障害物・見守りの必要性を確認':'立位・足位置固定：足を動かさず届く配置・姿勢・周囲・必要時の見守りを確認');$('lampStandingReady').checked=false;prepared=false;updateVideoGeometry();resetGame();mouse=null;tracker.reset();sourceTracks=[];cursors=[];slots=[null,null];
+  showText($('lampSafety'),$('lampPosture').value==='stepping'?'立位・移動あり：身体を移動させて操作できます。移動範囲と足元、周囲、見守りの必要性を確認してください。手が撮影範囲外なら採点できません。足の動きや転倒リスクは評価しません。':$('lampPosture').value!=='seated'?'立位・足位置固定：足を動かさず届く範囲で、姿勢・周囲・必要時の見守りを確認してください。カメラは安全性を保証しません。':'座位：安定した椅子で無理なく届く配置を確認。痛みや疲れがあれば中止してください。');render(true);
  });
  for(const id of ['lampFps','lampResolution','lampDelegate','lampCamera','lampHands','lampMirror'])$(id).addEventListener('change',reset);
  for(const id of ['lampPractice','lampStart'])$(id).setAttribute('aria-describedby','lampReadyStatus');
@@ -260,9 +267,13 @@ export function mountLampGame({standalone=false}={}){
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&active){game.pause(time(),'page_hidden');game.cancelCue();releaseCamera();setStatus('画面が非表示になったため停止しました。');render(true);}});
  window.addEventListener('pagehide',()=>{game.finish(time(),'screen_changed');game.cancelCue();releaseCamera();results.revoke();});
  video.addEventListener('resize',()=>{if(video.videoWidth&&video.videoHeight)updateVideoGeometry();});
- let resizeKey='';function resizeBoard(){if(!active||!board.clientWidth)return;const {w,h}=size(),key=w+'/'+h;if(key===resizeKey)return;resizeKey=key;if(game.state==='ready')resetGame();if($('lampInput').value==='hand'&&sourceTracks.length&&time()-lastHands<=MAX_RESULT_AGE_MS/1000){updateMappedCursors();game.input(cursors,time(),w,h);}if(!layout().valid&&['countdown','playing','paused'].includes(game.state)){game.finish(time(),'layout_invalid');releaseCamera();setStatus('画面の配置間隔が不足したため終了しました。結果は保持しています。画面サイズや個数を調整してください。');}render(true);}
+ let resizeKey='';function resizeBoard(){if(!active||!board.clientWidth)return;const {w,h}=size(),key=w+'/'+h;if(key===resizeKey)return;resizeKey=key;
+  // A changed display must not score a stationary old coordinate against a moved target.
+  mouse=null;sourceTracks=[];cursors=[];slots=[null,null];tracker.reset();game.input([],time(),w,h);
+  if(game.state==='ready')resetGame();if(!layout().valid&&['countdown','playing','paused'].includes(game.state)){game.finish(time(),'layout_invalid');releaseCamera();setStatus('画面の配置間隔が不足したため終了しました。結果は保持しています。画面サイズや個数を調整してください。');}render(true);}
  window.addEventListener('resize',resizeBoard);if(typeof ResizeObserver==='function')new ResizeObserver(resizeBoard).observe(board);
- const api={setActive(value){if(active===value)return;active=value;panel.hidden=settings.hidden=!value;
+ const screen=mountLampScreen({viewer,panel,settings,onOpen:()=>{if(['countdown','playing'].includes(game.state)){game.pause(time(),'manual_panel');setStatus('設定・成績を開いたため一時停止しました。閉じた後に再開を選んでください。');render(true);}},onChange:()=>{resizeKey='';videoTransformKey='';resizeBoard();render(true);}});
+ const api={setActive(value){if(active===value)return;active=value;panel.hidden=settings.hidden=!value;screen.setActive(value);
   if(value){resetGame();setStatus('画面全体のランプ。両人差し指をカメラに見せて操作できます。');render(true);raf=requestAnimationFrame(loop);void refreshCameras();}
   else{cancelAnimationFrame(raf);const {w,h}=size();game.finish(time(),'screen_changed');game.cancelCue();releaseCamera();results.revoke();}},summary:()=>game.summary()};
  if(standalone)api.setActive(true);return api;

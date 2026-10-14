@@ -1,5 +1,5 @@
 import {CameraLease} from './camera-lease.mjs';
-import {mountLampGame} from './lamp-ui.mjs?v=0.5.3';
+import {mountLampGame} from './lamp-ui.mjs?v=0.5.5';
 import {VERSION,MODEL_THRESHOLDS,Tracker,poseDetection,combineDetections,modeFeatures,interestRegion,angle2D,visible,EDGES,csv} from './core.mjs?v=1.3.0-lamp-0.5.1';
 import {CanvasRecorder} from './recorder.mjs';
 import {openVideo,seekVideo} from './file-video.mjs';

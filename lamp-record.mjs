@@ -59,10 +59,10 @@ export class LampRecord{
   if(Number.isFinite(softwareMs)&&softwareMs>=0)q.software_ms.push(softwareMs);
  }
  closeQuality(now){const q=this.quality.at(-1);if(q&&q.end_s===null)q.end_s=now-this.origin_s;}
- screen(now,w,h,radius){
+ screen(now,w,h,radius,displayFit='contain'){
   if(this.closed)return;
-  const last=this.condition_changes.at(-1),row={wall_s:now-this.origin_s,board_width_px:w,board_height_px:h,hit_radius_px:radius};
-  if(!last||last.board_width_px!==w||last.board_height_px!==h||last.hit_radius_px!==radius)this.condition_changes.push(row);
+  const last=this.condition_changes.at(-1),row={wall_s:now-this.origin_s,board_width_px:w,board_height_px:h,hit_radius_px:radius,display_fit:displayFit};
+  if(!last||last.board_width_px!==w||last.board_height_px!==h||last.hit_radius_px!==radius||last.display_fit!==displayFit)this.condition_changes.push(row);
  }
  runtime(now,camera,delegate){if(this.closed)return;this.condition_changes.push({wall_s:now-this.origin_s,camera_actual:copy(camera),delegate});}
  finish(now,elapsed,status){
@@ -86,6 +86,6 @@ export function resultCSVs(record){
  const summaryRows=[{row_type:'session',...session,conditions_json:conditions,condition_changes_json:condition_changes},...targets.map(t=>({row_type:'target',session_id:s.session_id,mode:s.mode,...t}))];
  const summaryColumns=[...new Set(summaryRows.flatMap(Object.keys))];
  const eventRows=[...record.tasks.map(t=>({row_type:'activation',session_id:s.session_id,mode:s.mode,...t})),...record.clock.map((c,i)=>({row_type:'clock_interval',session_id:s.session_id,mode:s.mode,interval_id:i+1,...c})),...quality.map((q,i)=>({row_type:'quality',session_id:s.session_id,mode:s.mode,quality_segment:i+1,wall_start_s:q.start_s,wall_end_s:q.end_s,delegate:q.delegate,analysis_frames:q.frames,accepted_frames:q.accepted,analysis_first_s:q.first_s,analysis_last_s:q.last_s,inference_samples:q.inference_ms.length,inference_median_ms:quantile(q.inference_ms,.5),inference_p95_ms:quantile(q.inference_ms,.95),inference_samples_ms_json:q.inference_ms,software_samples_ms_json:q.software_ms})),...condition_changes.map(c=>({row_type:'screen_change',session_id:s.session_id,mode:s.mode,...c}))];
- const eventColumns=['row_type','session_id','mode','activation_id','target_id','x','y','region','board_width_px','board_height_px','lit_game_s','lit_wall_s','expires_game_s','resolved_game_s','resolved_wall_s','outcome','response_ms','missing_reason','interval_id','wall_start_s','wall_end_s','game_start_s','game_end_s','kind','reason','quality_segment','delegate','analysis_frames','accepted_frames','analysis_first_s','analysis_last_s','inference_samples','inference_median_ms','inference_p95_ms','inference_samples_ms_json','software_samples_ms_json','wall_s','hit_radius_px','camera_actual'];
+ const eventColumns=['row_type','session_id','mode','activation_id','target_id','x','y','region','board_width_px','board_height_px','lit_game_s','lit_wall_s','expires_game_s','resolved_game_s','resolved_wall_s','outcome','response_ms','missing_reason','interval_id','wall_start_s','wall_end_s','game_start_s','game_end_s','kind','reason','quality_segment','delegate','analysis_frames','accepted_frames','analysis_first_s','analysis_last_s','inference_samples','inference_median_ms','inference_p95_ms','inference_samples_ms_json','software_samples_ms_json','wall_s','hit_radius_px','display_fit','camera_actual'];
  return {summary:csv(summaryRows,summaryColumns),events:csv(eventRows,eventColumns),summaryRows,eventRows};
 }

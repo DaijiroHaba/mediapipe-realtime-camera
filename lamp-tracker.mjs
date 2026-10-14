@@ -7,12 +7,17 @@ const transform=(p,mirror)=>({x:mirror?1-p.x:p.x,y:p.y});
 export function fingerObservations(result,mirror=false){
  const points=[],reasons=[];
  for(const p of (result.landmarks||[]).slice(0,2)){
-  const anchors=[0,5,9,13,17].map(k=>p[k]),required=[...anchors,...[6,7,8].map(k=>p[k])];
+  const bases=[5,9,13,17].map(k=>p[k]),fingers=[6,7,8].map(k=>p[k]),wrist=p[0];
+  // A bottom-clipped wrist alone need not reject a detected, interior index finger.
+  // Require all four MCP anchors and all three index points; never invent a missing point.
+  const bottomWrist=!!wrist&&Number.isFinite(wrist.x)&&Number.isFinite(wrist.y)&&wrist.x>.003&&wrist.x<.997&&wrist.y>=.997&&wrist.y<=1.15&&bases.every(q=>valid(q)&&q.x>.003&&q.x<.997&&q.y>.003&&q.y<.997)&&fingers.every(q=>valid(q)&&q.x>.003&&q.x<.997&&q.y>.003&&q.y<.997);
+  const anchors=bottomWrist?bases:[wrist,...bases],required=[...anchors,...fingers];
   if(required.some(q=>!valid(q))){reasons.push('指先・手の追跡点を確認できません（映像端・遮蔽等）');continue;}
   const edge=required.some(q=>q.x<=.003||q.x>=.997||q.y<=.003||q.y>=.997);
-  const palm={x:anchors.reduce((a,q)=>a+q.x,0)/5,y:anchors.reduce((a,q)=>a+q.y,0)/5};
-  points.push({palm:transform(palm,mirror),tip:transform(p[8],mirror),quality:!edge,reason:edge?'映像端で手の追跡点を確認中':''});
-  if(edge)reasons.push('映像端で手の追跡点を確認中');
+  const palm={x:anchors.reduce((a,q)=>a+q.x,0)/anchors.length,y:anchors.reduce((a,q)=>a+q.y,0)/anchors.length};
+  const reason=edge?'映像端で手の追跡点を確認中':bottomWrist?'手首が下で見切れ：検出された指先と指の付け根を使用':'';
+  points.push({palm:transform(palm,mirror),tip:transform(p[8],mirror),support:bottomWrist?'mcp4':'wrist-mcp4',quality:!edge,reason});
+  if(reason)reasons.push(reason);
  }
  if(!(result.landmarks||[]).length)reasons.push('手をカメラに映してください（未検出）');
  return {points,reasons};
@@ -48,11 +53,12 @@ export class FingerTracker{
   }
   const output=points.map((p,i)=>{
    let prior=ambiguous?null:priors[i];
+   if(prior&&prior.support!==p.support)prior=null; // anchor change needs reacquisition, not an immediate hit
    if(prior&&(dist(p.palm,prior.raw,aspect)>.25||dist(p.tip,prior.tip,aspect)>.3))prior=null;
    const speed=prior&&dt?dist(p.tip,prior.tip,aspect)/dt:0;
    // 25–50 ms engineering smoothing, weaker while moving.
    const tau=.05-.025*Math.min(1,speed/.8),alpha=dt?1-Math.exp(-dt/tau):1;
-   return {id:prior?.id??String(this.nextId++),raw:p.palm,tip:p.tip,x:prior&&smoothing?prior.x+alpha*(p.tip.x-prior.x):p.tip.x,y:prior&&smoothing?prior.y+alpha*(p.tip.y-prior.y):p.tip.y,eligible:!!prior&&!ambiguous&&p.quality!==false,reason:p.reason||(!prior||ambiguous?'手の対応を確認中':''),smoothingOffset:prior&&smoothing?Math.hypot((prior.x+alpha*(p.tip.x-prior.x)-p.tip.x)*aspect,prior.y+alpha*(p.tip.y-prior.y)-p.tip.y):0};
+   return {id:prior?.id??String(this.nextId++),raw:p.palm,tip:p.tip,support:p.support,x:prior&&smoothing?prior.x+alpha*(p.tip.x-prior.x):p.tip.x,y:prior&&smoothing?prior.y+alpha*(p.tip.y-prior.y):p.tip.y,eligible:!!prior&&!ambiguous&&p.quality!==false,reason:p.reason||(!prior||ambiguous?'手の対応を確認中':''),smoothingOffset:prior&&smoothing?Math.hypot((prior.x+alpha*(p.tip.x-prior.x)-p.tip.x)*aspect,prior.y+alpha*(p.tip.y-prior.y)-p.tip.y):0};
   });
   this.tracks=output;return output;
  }
