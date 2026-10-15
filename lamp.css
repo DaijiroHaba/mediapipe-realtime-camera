@@ -79,3 +79,14 @@ body.lamp-mode #viewer:fullscreen.lamp-screen #lampBoard{width:100%!important;he
 #lampBottomBand{position:absolute;inset:auto 0 0;height:16%;background:#10342b26;border-top:1px dashed #b9dcce60;pointer-events:none;color:#e7fff6;font-size:12px;text-align:center}
 #lampBottomBand span{position:absolute;bottom:6px;left:0;right:0;text-shadow:0 1px 2px #10272b}
 #lampBottomValue{font-variant-numeric:tabular-nums}
+
+/* Player selection: quiet outlines, explicit selection and confirmation. */
+#lampPlayerBar{background:#e4f2f6;color:#173b48;border:1px solid #548391;border-radius:6px;padding:7px 9px;margin:6px 0;font-size:13px;line-height:1.5}
+#lampPlayerBar strong,#lampPlayerBar small{display:block}#lampPlayerActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 0}
+#lampPlayerChoices{display:inline-flex;gap:5px;flex-wrap:wrap}#lampPlayerBar button{color:#173b48;background:#fff;border:1px solid #548391;padding:6px 9px;min-height:32px}
+#lampPlayerBar #lampPlayerConfirm{background:#186583;color:#fff}#lampPlayerBar button:disabled{opacity:.55}#lampPlayerActions.locked>span:first-child{display:none}
+#lampPlayerOverlay{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}#lampTargets{position:absolute;inset:0;z-index:2}#lampPanel .lamp-cursor{z-index:3}
+.lamp-person-box{position:absolute;box-sizing:border-box;border:2px dashed #e8eff2;border-radius:8px;pointer-events:none}
+.lamp-person-box.selected{border:3px solid #66d5ff}.lamp-person-box span{position:absolute;top:0;left:0;background:#163b4e;color:#fff;font-size:12px;padding:2px 5px;max-width:100%;white-space:nowrap}
+#viewer.lamp-screen #lampPlayerBar{font-size:12px;margin:2px 0;padding:3px 6px}#viewer.lamp-screen #lampPlayerBar small{font-size:11px}#viewer.lamp-screen #lampPlayerActions.locked{display:inline-flex;margin:0 0 0 8px}#viewer.lamp-screen #lampPlayerBar:has(.locked) strong{display:inline}
+#lampPanel .lamp-person-box{background:transparent;margin:0;padding:0;box-shadow:none;min-height:0;cursor:pointer}#lampPanel .lamp-person-box:disabled{opacity:1;cursor:default}#lampPanel .lamp-person-box:focus-visible{outline:3px solid #fff;outline-offset:-6px}

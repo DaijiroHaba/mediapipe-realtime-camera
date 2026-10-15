@@ -1,9 +1,9 @@
 // @ts-check
-import {createLayout,geometry} from './lamp-layout.mjs?v=0.5.5';
-import {LampRecord,aggregate} from './lamp-record.mjs?v=0.5.5';
-export {targetPositions,targetLayout} from './lamp-layout.mjs?v=0.5.5';
+import {createLayout,geometry} from './lamp-layout.mjs?v=0.6.0';
+import {LampRecord,aggregate} from './lamp-record.mjs?v=0.6.0';
+export {targetPositions,targetLayout} from './lamp-layout.mjs?v=0.6.0';
 /** @typedef {{id:string,x:number,y:number,eligible:boolean,visible?:boolean}} Cursor */
-export const GAME_VERSION='0.5.5';
+export const GAME_VERSION='0.6.0';
 export const DEFAULT_GAME={duration:30,interval:2,lifetime:6,maxActive:2,pattern:'sequential',lampCount:30,placement:'grid',seed:-1,mapMode:'image',mirror:true,smoothing:false,width:.48,height:.46,cx:.5,cy:.56,posture:'seated',movementMode:'fixed',bottomReserve:.16};
 /** @typedef {typeof DEFAULT_GAME} GameSettings */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
